@@ -1,0 +1,46 @@
+cmake_minimum_required(VERSION 3.10)
+project(sorr_android C CXX)
+
+set(SRC /home/claude/sorr/src)
+
+# ---- SDL2 (shared: libSDL2.so, loaded by SDLActivity) ----
+set(SDL_SHARED ON CACHE BOOL "" FORCE)
+set(SDL_STATIC OFF CACHE BOOL "" FORCE)
+set(SDL_TEST OFF CACHE BOOL "" FORCE)
+add_subdirectory(${SRC}/SDL2 SDL2)
+
+# ---- SDL2_mixer (static, built-in decoders only) ----
+if(NOT TARGET SDL2::SDL2-static)
+  add_library(SDL2::SDL2-static ALIAS SDL2)
+endif()
+set(SDL2MIXER_VENDORED OFF CACHE BOOL "" FORCE)
+set(SDL2MIXER_INSTALL OFF CACHE BOOL "" FORCE)
+set(SDL2MIXER_SAMPLES OFF CACHE BOOL "" FORCE)
+set(SDL2MIXER_DEPS_SHARED OFF CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(SDL2MIXER_OPUS OFF CACHE BOOL "" FORCE)
+set(SDL2MIXER_MOD OFF CACHE BOOL "" FORCE)
+set(SDL2MIXER_MIDI OFF CACHE BOOL "" FORCE)
+set(SDL2MIXER_WAVPACK OFF CACHE BOOL "" FORCE)
+set(SDL2MIXER_GME OFF CACHE BOOL "" FORCE)
+set(SDL2MIXER_FLAC_LIBFLAC OFF CACHE BOOL "" FORCE)
+set(SDL2MIXER_FLAC_DRFLAC ON CACHE BOOL "" FORCE)
+set(SDL2MIXER_MP3_MINIMP3 ON CACHE BOOL "" FORCE)
+set(SDL2MIXER_MP3_MPG123 OFF CACHE BOOL "" FORCE)
+set(SDL2MIXER_VORBIS STB CACHE STRING "" FORCE)
+add_subdirectory(${SRC}/SDL2_mixer SDL2_mixer)
+
+# ---- libpng (static) ----
+set(PNG_SHARED OFF CACHE BOOL "" FORCE)
+set(PNG_STATIC ON CACHE BOOL "" FORCE)
+set(PNG_TESTS OFF CACHE BOOL "" FORCE)
+set(PNG_TOOLS OFF CACHE BOOL "" FORCE)
+set(PNG_EXECUTABLES OFF CACHE BOOL "" FORCE)
+set(SKIP_INSTALL_ALL ON CACHE BOOL "" FORCE)
+add_subdirectory(${SRC}/libpng libpng)
+set(PNG_INCLUDE_DIR ${SRC}/libpng ${CMAKE_BINARY_DIR}/libpng)
+
+# ---- BennuGD (monolithic) engine -> libmain.so ----
+set(SDL2_INCLUDE_DIR ${SRC}/SDL2/include ${CMAKE_BINARY_DIR}/SDL2/include ${CMAKE_BINARY_DIR}/SDL2/include-config-release)
+set(SDL2_MIXER_INCLUDE_DIRS ${SRC}/SDL2_mixer/include)
+add_subdirectory(${SRC}/engine engine)
