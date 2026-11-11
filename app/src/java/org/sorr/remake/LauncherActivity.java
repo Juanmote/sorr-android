@@ -40,7 +40,14 @@ public class LauncherActivity extends Activity {
     public static final String KEY_PAD_KEYBOARD = "pad_keyboard";
     public static final String KEY_ALPHA = "touch_alpha";
     public static final String KEY_SIZE = "touch_size";
-    public static final String KEY_STRETCH = "video_stretch";
+    public static final String KEY_STRETCH = "video_stretch";   // old setting (pre aspect modes)
+    public static final String KEY_ASPECT = "video_aspect";     // fit | crop | mix | stretch
+
+    public static String aspectMode(SharedPreferences p) {
+        String a = p.getString(KEY_ASPECT, null);
+        if (a == null) a = p.getBoolean(KEY_STRETCH, false) ? "stretch" : "fit";
+        return a;
+    }
     public static final String KEY_SMOOTH = "video_smooth";
 
     private static final int REQ_TREE = 10;
@@ -157,7 +164,7 @@ public class LauncherActivity extends Activity {
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
             Button sel = button((isActive ? "● " : "○ ") + name, isActive, v -> {
-                if (!profiles.switchTo(name)) toast("No se pudo cambiar de perfil");
+                report(profiles.switchTo(name));
                 render();
             });
             row.addView(sel, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
@@ -172,11 +179,11 @@ public class LauncherActivity extends Activity {
         }
         if (!profiles.exists(Profiles.UNLOCKED_NAME)) {
             pc.addView(button("+ Crear perfil \"Unlocked\" (todo desbloqueado)", false, v -> {
-                if (!profiles.create(Profiles.UNLOCKED_NAME, Profiles.ASSET_UNLOCK)) toast("No se pudo crear");
+                report(profiles.create(Profiles.UNLOCKED_NAME, Profiles.ASSET_UNLOCK));
                 render();
             }), lpMatch());
         }
-        pc.addView(button("+ Nuevo perfil vacío", false, v -> askNewProfile(profiles)), lpMatch());
+        pc.addView(button("+ Nuevo perfil (partida desde cero)", false, v -> askNewProfile(profiles)), lpMatch());
 
         // ---- Controls
         LinearLayout cc = card("Controles");
@@ -200,11 +207,22 @@ public class LauncherActivity extends Activity {
 
         // ---- Video
         LinearLayout vc = card("Imagen");
-        boolean stretch = prefs.getBoolean(KEY_STRETCH, false);
-        vc.addView(button(stretch ? "Proporción: ESTIRADA a toda la pantalla" : "Proporción: ORIGINAL 4:3 (bandas negras)", false, v -> {
-            prefs.edit().putBoolean(KEY_STRETCH, !stretch).apply();
+        final String aspect = aspectMode(prefs);
+        final String[] modes = { "fit", "crop", "mix", "stretch" };
+        final String[] labels = {
+                "Proporción: ORIGINAL (sin deformar, con bandas negras)",
+                "Proporción: RECORTAR (sin deformar, llena la pantalla cortando los bordes)",
+                "Proporción: MIXTA (mitad recorte, mitad estirado)",
+                "Proporción: ESTIRADA (llena la pantalla deformando)" };
+        int idx = 0;
+        for (int i = 0; i < modes.length; i++) if (modes[i].equals(aspect)) idx = i;
+        final int next = (idx + 1) % modes.length;
+        vc.addView(button(labels[idx], false, v -> {
+            prefs.edit().putString(KEY_ASPECT, modes[next]).apply();
             render();
         }), lpMatch());
+        vc.addView(text("Pulsa para cambiar. En pantallas casi cuadradas (8:7) prueba RECORTAR o MIXTA; "
+                + "el modo panorámico del propio juego se elige en sus opciones.", 13, MUTED));
         boolean smooth = prefs.getBoolean(KEY_SMOOTH, false);
         vc.addView(button(smooth ? "Filtro: SUAVIZADO" : "Filtro: PÍXELES NÍTIDOS", false, v -> {
             prefs.edit().putBoolean(KEY_SMOOTH, !smooth).apply();
@@ -221,24 +239,41 @@ public class LauncherActivity extends Activity {
         new AlertDialog.Builder(this)
                 .setTitle("Borrar perfil")
                 .setMessage("¿Borrar el perfil \"" + name + "\" y todas sus partidas?")
-                .setPositiveButton("Borrar", (d, w) -> { profiles.delete(name); render(); })
+                .setPositiveButton("Borrar", (d, w) -> { report(profiles.delete(name)); render(); })
                 .setNegativeButton("Cancelar", null)
                 .show();
     }
 
     private void askNewProfile(Profiles profiles) {
-        EditText et = new EditText(this);
+        final EditText et = new EditText(this);
         et.setInputType(InputType.TYPE_CLASS_TEXT);
-        et.setHint("Nombre");
-        new AlertDialog.Builder(this)
+        et.setSingleLine(true);
+        // A ready-to-use name, so no keyboard is needed: just press "Crear"
+        et.setText(profiles.suggestName());
+        et.setSelectAllOnFocus(true);
+        AlertDialog dlg = new AlertDialog.Builder(this)
                 .setTitle("Nuevo perfil")
+                .setMessage("Empieza con una partida nueva, sin nada desbloqueado. Puedes cambiar el nombre o dejar el propuesto.")
                 .setView(et)
                 .setPositiveButton("Crear", (d, w) -> {
-                    if (!profiles.create(et.getText().toString(), Profiles.ASSET_BASE))
-                        toast("Nombre no válido o ya existe");
+                    report(profiles.create(et.getText().toString(), Profiles.ASSET_BASE));
                     render();
                 })
                 .setNegativeButton("Cancelar", null)
+                .create();
+        if (dlg.getWindow() != null) {
+            dlg.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        }
+        dlg.show();
+    }
+
+    /** Shows an error returned by a profile operation (null = everything went fine). */
+    private void report(String error) {
+        if (error == null) return;
+        new AlertDialog.Builder(this)
+                .setTitle("No se pudo completar")
+                .setMessage(error)
+                .setPositiveButton("Aceptar", null)
                 .show();
     }
 
@@ -268,7 +303,8 @@ public class LauncherActivity extends Activity {
 
     private void launch(File dir, File dat) {
         Profiles profiles = new Profiles(this, dir, prefs);
-        profiles.prepareActive();
+        String perr = profiles.prepareActive();
+        if (perr != null) { report(perr); return; }
         String since = new java.text.SimpleDateFormat("MM-dd HH:mm:ss.SSS", java.util.Locale.US)
                 .format(new java.util.Date(System.currentTimeMillis() - 1000));
         prefs.edit().putString("pending_log_dir", dir.getAbsolutePath())

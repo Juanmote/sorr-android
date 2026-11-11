@@ -39,7 +39,7 @@ public class GameActivity extends SDLActivity implements TouchOverlay.KeySink {
     protected void onCreate(Bundle savedInstanceState) {
         SharedPreferences p = getSharedPreferences(LauncherActivity.PREFS, MODE_PRIVATE);
         try {
-            android.system.Os.setenv("SORR_STRETCH", p.getBoolean(LauncherActivity.KEY_STRETCH, false) ? "1" : "0", true);
+            android.system.Os.setenv("SORR_ASPECT", LauncherActivity.aspectMode(p), true);
             android.system.Os.setenv("SDL_JOYSTICK_HIDAPI", "0", true);
             android.system.Os.setenv("SORR_SMOOTH", p.getBoolean(LauncherActivity.KEY_SMOOTH, false) ? "1" : "0", true);
         } catch (Exception ignored) {}

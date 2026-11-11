@@ -391,10 +391,8 @@ int gr_set_mode( int width, int height, int depth )
     {
         const char * smooth = getenv( "SORR_SMOOTH" );
         SDL_SetHint( SDL_HINT_RENDER_SCALE_QUALITY, ( smooth && *smooth == '1' ) ? "1" : "0" );
-        if ( getenv( "SORR_STRETCH" ) && *getenv( "SORR_STRETCH" ) == '1' )
-            SDL_RenderSetLogicalSize( renderer, 0, 0 );
-        else
-            SDL_RenderSetLogicalSize( renderer, width, height );
+        /* Scaling/aspect is done by hand when presenting the frame (g_screen.c) */
+        SDL_RenderSetLogicalSize( renderer, 0, 0 );
     }
 #endif
 
