@@ -1,6 +1,6 @@
 # Estado del proyecto: port Android de Streets of Rage Remake
 
-Última actualización: 11 de noviembre de 2026 (versión 5 de la APK).
+Última actualización: 12 de noviembre de 2026 (versión 6 de la APK).
 
 ## Qué es
 
@@ -63,13 +63,27 @@ consola; la parte técnica la hace Claude.
 - Modos de proporción: Original / Recortar / Mixta / Estirada. El usuario quería 8:7 sin deformar:
   un 8:7 "real" (que el juego dibuje otro campo de visión) no es posible desde el motor.
 
+## Entregado en la versión 6, pendiente de probar
+
+- Tabla de botones del mando editable desde el lanzador (Controles > Configurar botones del mando):
+  cada tecla del juego (X, C, V, B, S, A, D, R, Enter, Esc) admite cualquier botón que mande el mando.
+  Se guarda en la preferencia `pad_map` (`Keys.java`). Motivo: el usuario no podía cambiar controles
+  dentro del juego y quiere usar los seis botones de la Retroid Pocket Classic. De serie, C y Z van a
+  las teclas D y B.
+- El perfil "Unlocked" existe siempre y no se puede borrar.
+- Icono nuevo (logo, con icono adaptable) y fondo del lanzador con el arte de personajes
+  (`res/drawable-nodpi/launcher_art.webp`, dibujado por `ArtView`). Texto "Ported by Juanmote".
+
 ## Pendiente
 
-1. **Traducción al castellano como opción de idioma.** Hace falta `SorR.dat` (el usuario lo subirá,
-   en zip al chat o como adjunto de una Release del repo). Primer paso: ver cuánto texto hay en la
-   tabla de cadenas del DCB y cuánto está en imágenes (FPG), y decidir cómo ofrecerlo sin tocar el
-   juego original (por ejemplo, un `SorR.dat` alternativo o parche aplicado por el lanzador).
-2. El usuario irá apuntando más mejoras según juegue.
+1. **Cheats desactivados en el perfil "Unlocked".** La partida de PortMaster trae cheats activados y
+   no se sabe qué posiciones de `savegame.sor` son los interruptores. Plan: el usuario desactiva todos
+   los cheats en su perfil Unlocked, sale del juego y manda `savegame/savegame.sor`; comparándolo con
+   `assets/saves/savegame-unlock.sor` se localizan y se corrige la partida que va dentro de la APK.
+   De paso, igualar el bloque de teclas (posiciones 1180-1264) al de la partida base: en la de
+   PortMaster las teclas B/S/A están en otro orden.
+2. La traducción queda descartada: el juego ya trae castellano.
+3. El usuario irá apuntando más mejoras según juegue.
 
 ## Notas
 

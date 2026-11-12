@@ -131,8 +131,26 @@ public class Profiles {
         return e;
     }
 
+    /** The "Unlocked" profile always exists: creates its stored copy when missing (without selecting it). */
+    public String ensureUnlocked() {
+        if (exists(UNLOCKED_NAME)) return null;
+        File dir = stored(UNLOCKED_NAME);
+        if (!dir.isDirectory() && !dir.mkdirs()) return "No se pudo crear " + PROFILES_DIR + "/" + UNLOCKED_NAME;
+        if (!copyAsset(ASSET_UNLOCK, new File(dir, SAVE_FILE))) {
+            deleteRec(dir);
+            return "No se pudo escribir la partida del perfil";
+        }
+        return null;
+    }
+
+    /** Profiles that can never be deleted. */
+    public static boolean isProtected(String name) {
+        return UNLOCKED_NAME.equalsIgnoreCase(name);
+    }
+
     public String delete(String name) {
         if (name.equals(activeName())) return "No se puede borrar el perfil activo";
+        if (isProtected(name)) return "El perfil \"" + name + "\" no se puede borrar";
         File dir = stored(name);
         if (dir.exists() && !deleteRec(dir)) return "No se pudo borrar " + dir.getName();
         return null;

@@ -56,8 +56,9 @@ public class LauncherActivity extends Activity {
     private SharedPreferences prefs;
     private LinearLayout root;
 
-    private static final int BG = 0xFF14161C;
-    private static final int CARD = 0xFF1F232C;
+    private static final int BG = 0xFF0B0C12;
+    private static final int CARD = 0xE61F232C;
+    private boolean mapScreen;   // showing the gamepad button table
     private static final int ACCENT = 0xFFE0412F;
     private static final int TEXT = 0xFFF2F2F2;
     private static final int MUTED = 0xFFA0A6B2;
@@ -68,14 +69,83 @@ public class LauncherActivity extends Activity {
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        android.widget.FrameLayout frame = new android.widget.FrameLayout(this);
+        frame.addView(new ArtView(this), new android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT));
         ScrollView sv = new ScrollView(this);
-        sv.setBackgroundColor(BG);
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         int pad = dp(20);
         root.setPadding(pad, pad, pad, pad);
         sv.addView(root);
-        setContentView(sv);
+        // Wide screens: options on the left, artwork free on the right.
+        // Nearly square screens: options over the (dimmed) artwork.
+        android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+        int sw = Math.max(dm.widthPixels, dm.heightPixels), sh = Math.min(dm.widthPixels, dm.heightPixels);
+        int colW = isWide(sw, sh) ? (int) (sw * COLUMN) : android.widget.FrameLayout.LayoutParams.MATCH_PARENT;
+        frame.addView(sv, new android.widget.FrameLayout.LayoutParams(
+                colW, android.widget.FrameLayout.LayoutParams.MATCH_PARENT));
+        setContentView(frame);
+    }
+
+    private static final float COLUMN = 0.56f;
+
+    private static boolean isWide(int w, int h) { return w >= h * 1.5f; }
+
+    /** Background: character artwork behind / beside the options. */
+    private static class ArtView extends View {
+        private final android.graphics.Bitmap art;
+        private final android.graphics.Paint paint = new android.graphics.Paint(
+                android.graphics.Paint.FILTER_BITMAP_FLAG | android.graphics.Paint.ANTI_ALIAS_FLAG);
+        private final android.graphics.Paint scrim = new android.graphics.Paint();
+        private final android.graphics.RectF dst = new android.graphics.RectF();
+
+        ArtView(android.content.Context c) {
+            super(c);
+            android.graphics.Bitmap b = null;
+            try {
+                b = android.graphics.BitmapFactory.decodeResource(c.getResources(), R.drawable.launcher_art);
+            } catch (Throwable ignored) {}
+            art = b;
+        }
+
+        @Override
+        protected void onDraw(android.graphics.Canvas cv) {
+            int w = getWidth(), h = getHeight();
+            scrim.setShader(new android.graphics.LinearGradient(0, 0, 0, h,
+                    0xFF1A1630, BG, android.graphics.Shader.TileMode.CLAMP));
+            cv.drawRect(0, 0, w, h, scrim);
+            if (art == null || w == 0 || h == 0) return;
+            boolean wide = isWide(w, h);
+            float side = h;                      // the artwork is square: fit to height
+            float left = wide ? w - side : (w - side) / 2f;
+            dst.set(left, 0, left + side, side);
+            if (!wide) {
+                paint.setAlpha(140);
+                cv.drawBitmap(art, null, dst, paint);
+                return;
+            }
+            // fade the artwork out where it meets the options column
+            paint.setAlpha(255);
+            float edge = w * COLUMN + h * 0.12f;
+            int layer = cv.saveLayer(dst, null);
+            cv.drawBitmap(art, null, dst, paint);
+            if (left < edge) {
+                scrim.setShader(new android.graphics.LinearGradient(left, 0, edge, 0,
+                        0x00000000, 0xFF000000, android.graphics.Shader.TileMode.CLAMP));
+                scrim.setXfermode(new android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_IN));
+                cv.drawRect(dst, scrim);
+                scrim.setXfermode(null);
+            }
+            cv.restoreToCount(layer);
+        }
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (mapScreen) { mapScreen = false; render(); return; }
+        super.onBackPressed();
     }
 
     @Override
@@ -116,7 +186,12 @@ public class LauncherActivity extends Activity {
         title.setTypeface(Typeface.DEFAULT_BOLD);
         root.addView(title);
         root.addView(text("Port Android (BennuGD + SDL2)", 14, MUTED));
+        TextView by = text("Ported by Juanmote", 14, 0xFFFFB04A);
+        by.setTypeface(Typeface.DEFAULT_BOLD);
+        root.addView(by);
         space(16);
+
+        if (mapScreen) { renderMap(); return; }
 
         // ---- Storage permission
         if (!hasStorage()) {
@@ -143,6 +218,7 @@ public class LauncherActivity extends Activity {
         if (dat == null) return;
 
         Profiles profiles = new Profiles(this, dir, prefs);
+        profiles.ensureUnlocked();
 
         // ---- Play
         space(4);
@@ -155,7 +231,7 @@ public class LauncherActivity extends Activity {
         // ---- Profiles
         LinearLayout pc = card("Perfiles de guardado");
         pc.addView(text("Cada perfil tiene sus propias partidas, opciones y desbloqueables. "
-                + "\"Unlocked\" empieza con la tienda y todos los extras desbloqueados.", 13, MUTED));
+                + "\"Unlocked\" trae la tienda y todos los extras desbloqueados y no se puede borrar.", 13, MUTED));
         List<String> list = profiles.list();
         String active = profiles.activeName();
         for (String name : list) {
@@ -168,7 +244,7 @@ public class LauncherActivity extends Activity {
                 render();
             });
             row.addView(sel, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-            if (!isActive) {
+            if (!isActive && !Profiles.isProtected(name)) {
                 Button del = button("Borrar", false, v -> confirmDelete(profiles, name));
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                         LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -176,12 +252,6 @@ public class LauncherActivity extends Activity {
                 row.addView(del, lp);
             }
             pc.addView(row, lpMatch());
-        }
-        if (!profiles.exists(Profiles.UNLOCKED_NAME)) {
-            pc.addView(button("+ Crear perfil \"Unlocked\" (todo desbloqueado)", false, v -> {
-                report(profiles.create(Profiles.UNLOCKED_NAME, Profiles.ASSET_UNLOCK));
-                render();
-            }), lpMatch());
         }
         pc.addView(button("+ Nuevo perfil (partida desde cero)", false, v -> askNewProfile(profiles)), lpMatch());
 
@@ -202,6 +272,11 @@ public class LauncherActivity extends Activity {
         cc.addView(text(kb
                 ? "El mando funciona directamente con la configuración de teclas del perfil. Para 2 jugadores con 2 mandos, cambia a modo joystick."
                 : "El juego verá los mandos como joysticks: configúralos en Options > Controls.", 13, MUTED));
+        if (kb) {
+            cc.addView(button("Configurar botones del mando", false, v -> { mapScreen = true; render(); }), lpMatch());
+            cc.addView(text("Elige qué botón del mando hace cada cosa. Sirve para cualquier mando, "
+                    + "también los de seis botones.", 13, MUTED));
+        }
         cc.addView(slider("Opacidad de los botones", KEY_ALPHA, 50, 15, 90));
         cc.addView(slider("Tamaño de los botones", KEY_SIZE, 100, 60, 140));
 
@@ -233,6 +308,63 @@ public class LauncherActivity extends Activity {
         root.addView(text("Si algo falla, en la carpeta del juego se crean sorr_log.txt y sorr_logcat.txt con los detalles.", 12, MUTED));
         root.addView(text("Motor: bennugd-monolithic (josebagar, isage). Partidas base: PortMaster. "
                 + "Streets of Rage Remake © Bombergames. Juego freeware, sin afiliación con SEGA.", 11, MUTED));
+    }
+
+    // ------------------------------------------------------------------ gamepad table
+
+    private void renderMap() {
+        final java.util.Map<Integer, Integer> map = Keys.load(prefs);
+        LinearLayout c = card("Botones del mando");
+        c.addView(text("Cada fila es una tecla del juego. Toca una fila y pulsa en el mando el botón que quieras "
+                + "para ella; puedes poner varios botones a la misma tecla. Qué hace cada tecla se ve dentro del "
+                + "juego, en Options > Controls (teclado). La cruceta y el stick siempre mueven al personaje.", 13, MUTED));
+        for (int i = 0; i < Keys.TARGETS.length; i++) {
+            final int target = Keys.TARGETS[i];
+            final String label = Keys.TARGET_LABELS[i];
+            StringBuilder who = new StringBuilder();
+            for (java.util.Map.Entry<Integer, Integer> e : map.entrySet()) {
+                if (e.getValue() == target) {
+                    if (who.length() > 0) who.append(", ");
+                    who.append(Keys.padName(e.getKey()));
+                }
+            }
+            String shown = who.length() == 0 ? "sin botón" : who.toString();
+            Button b = button(label + "   ←   " + shown, false, v -> captureButton(target, label));
+            b.setGravity(Gravity.CENTER_VERTICAL | Gravity.LEFT);
+            c.addView(b, lpMatch());
+        }
+        c.addView(button("Restablecer botones de serie", false, v -> { Keys.reset(prefs); render(); }), lpMatch());
+        root.addView(button("Volver", true, v -> { mapScreen = false; render(); }), lpMatch());
+    }
+
+    private void captureButton(final int target, String label) {
+        final AlertDialog dlg = new AlertDialog.Builder(this)
+                .setTitle(label)
+                .setMessage("Pulsa ahora en el mando el botón que quieres usar para esta tecla.")
+                .setNegativeButton("Cancelar", null)
+                .setNeutralButton("Quitar sus botones", (d, w) -> {
+                    java.util.Map<Integer, Integer> m = Keys.load(prefs);
+                    java.util.Iterator<java.util.Map.Entry<Integer, Integer>> it = m.entrySet().iterator();
+                    while (it.hasNext()) if (it.next().getValue() == target) it.remove();
+                    Keys.save(prefs, m);
+                    render();
+                })
+                .create();
+        dlg.setOnKeyListener((d, keyCode, ev) -> {
+            boolean pad = (ev.getSource() & android.view.InputDevice.SOURCE_GAMEPAD) == android.view.InputDevice.SOURCE_GAMEPAD
+                    || (ev.getSource() & android.view.InputDevice.SOURCE_JOYSTICK) == android.view.InputDevice.SOURCE_JOYSTICK
+                    || android.view.KeyEvent.isGamepadButton(keyCode);
+            if (!pad) return false;                       // touch / system back: normal behaviour
+            if (ev.getAction() != android.view.KeyEvent.ACTION_DOWN || ev.getRepeatCount() > 0) return true;
+            if (!Keys.assignable(keyCode)) return true;   // directions etc.: ignore
+            java.util.Map<Integer, Integer> m = Keys.load(prefs);
+            m.put(keyCode, target);
+            Keys.save(prefs, m);
+            d.dismiss();
+            render();
+            return true;
+        });
+        dlg.show();
     }
 
     private void confirmDelete(Profiles profiles, String name) {

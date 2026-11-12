@@ -22,6 +22,7 @@ public class GameActivity extends SDLActivity implements TouchOverlay.KeySink {
     private String touchMode;      // auto | never
     private boolean padAsKeyboard; // physical gamepad -> keyboard keys
     private final Set<Integer> stickHeld = new HashSet<>();
+    private java.util.Map<Integer, Integer> padMap = Keys.defaults();
 
     @Override
     protected String[] getLibraries() {
@@ -47,6 +48,7 @@ public class GameActivity extends SDLActivity implements TouchOverlay.KeySink {
         goImmersive();
         touchMode = p.getString(LauncherActivity.KEY_TOUCH, "auto");
         padAsKeyboard = p.getBoolean(LauncherActivity.KEY_PAD_KEYBOARD, true);
+        padMap = Keys.load(p);
         if (mLayout != null && !"never".equals(touchMode)) {
             float alpha = p.getInt(LauncherActivity.KEY_ALPHA, 50) / 100f;
             float size = p.getInt(LauncherActivity.KEY_SIZE, 100) / 100f;
@@ -133,8 +135,12 @@ public class GameActivity extends SDLActivity implements TouchOverlay.KeySink {
         if (isGamepad(event.getSource()) || KeyEvent.isGamepadButton(code)) {
             hideOverlay();
             if (padAsKeyboard) {
-                int k = Keys.fromGamepad(code);
-                if (code == KeyEvent.KEYCODE_BACK) k = Keys.BACK;
+                int k = Keys.direction(code);
+                if (k == -1) {
+                    Integer m = padMap.get(code);
+                    if (m != null) k = m;
+                    else if (code == KeyEvent.KEYCODE_BACK) k = Keys.BACK;
+                }
                 if (k != -1) {
                     sendKey(event, k);
                     return true;
