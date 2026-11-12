@@ -1,6 +1,6 @@
 # Estado del proyecto: port Android de Streets of Rage Remake
 
-Última actualización: 12 de noviembre de 2026 (versión 6 de la APK).
+Última actualización: 12 de noviembre de 2026 (versión 7 de la APK).
 
 ## Qué es
 
@@ -74,16 +74,22 @@ consola; la parte técnica la hace Claude.
 - Icono nuevo (logo, con icono adaptable) y fondo del lanzador con el arte de personajes
   (`res/drawable-nodpi/launcher_art.webp`, dibujado por `ArtView`). Texto "Ported by Juanmote".
 
+## Entregado en la versión 7, pendiente de probar
+
+- Partida "Unlocked" de la APK con los cheats apagados. En `savegame.sor` (enteros de 32 bits), las
+  posiciones 176-252 son los cheats: 0 = sin comprar, 1 = comprado y apagado, 2 = activado. Se han
+  pasado los 2 a 1 y la posición 916 a 3, según la partida que mandó el usuario.
+- Teclas igualadas en las dos partidas de la APK (posiciones 1208-1216 = A, B, S).
+- Acciones confirmadas por el usuario: X especial, C ataque, V salto, B combo especial, S combo final,
+  A policía, D golpear atrás (R no hace nada). Botones de serie: X=X, B=ataque, A=salto, R2 y L2=combo
+  especial, Y y Z=combo final, L1=policía, R1 y C=golpear atrás. El lanzador muestra las acciones.
+
 ## Pendiente
 
-1. **Cheats desactivados en el perfil "Unlocked".** La partida de PortMaster trae cheats activados y
-   no se sabe qué posiciones de `savegame.sor` son los interruptores. Plan: el usuario desactiva todos
-   los cheats en su perfil Unlocked, sale del juego y manda `savegame/savegame.sor`; comparándolo con
-   `assets/saves/savegame-unlock.sor` se localizan y se corrige la partida que va dentro de la APK.
-   De paso, igualar el bloque de teclas (posiciones 1180-1264) al de la partida base: en la de
-   PortMaster las teclas B/S/A están en otro orden.
-2. La traducción queda descartada: el juego ya trae castellano.
-3. El usuario irá apuntando más mejoras según juegue.
+1. **Juego en red.** El usuario lo quiere "como en Outfoxies" (hecho en otro chat). El juego no lo trae:
+   habría que sincronizar las entradas de los dos jugadores en el motor (mismo `SorR.dat`, misma partida
+   y opciones, misma semilla aleatoria). Para probarlo en Linux con dos copias hace falta `SorR.dat`.
+2. El usuario irá apuntando más mejoras según juegue.
 
 ## Notas
 

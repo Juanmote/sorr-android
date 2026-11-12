@@ -315,9 +315,8 @@ public class LauncherActivity extends Activity {
     private void renderMap() {
         final java.util.Map<Integer, Integer> map = Keys.load(prefs);
         LinearLayout c = card("Botones del mando");
-        c.addView(text("Cada fila es una tecla del juego. Toca una fila y pulsa en el mando el botón que quieras "
-                + "para ella; puedes poner varios botones a la misma tecla. Qué hace cada tecla se ve dentro del "
-                + "juego, en Options > Controls (teclado). La cruceta y el stick siempre mueven al personaje.", 13, MUTED));
+        c.addView(text("Cada fila es una acción del juego. Toca una fila y pulsa en el mando el botón que quieras "
+                + "para ella; puedes poner varios botones a la misma acción. La cruceta y el stick siempre mueven al personaje.", 13, MUTED));
         for (int i = 0; i < Keys.TARGETS.length; i++) {
             final int target = Keys.TARGETS[i];
             final String label = Keys.TARGET_LABELS[i];

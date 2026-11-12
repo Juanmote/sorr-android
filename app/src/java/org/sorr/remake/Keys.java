@@ -22,14 +22,15 @@ public final class Keys {
     public static final int LEFT = KeyEvent.KEYCODE_DPAD_LEFT;
     public static final int RIGHT = KeyEvent.KEYCODE_DPAD_RIGHT;
 
-    public static final int A = KeyEvent.KEYCODE_V;
-    public static final int B = KeyEvent.KEYCODE_C;
-    public static final int X = KeyEvent.KEYCODE_X;
-    public static final int Y = KeyEvent.KEYCODE_A;
-    public static final int L1 = KeyEvent.KEYCODE_B;
-    public static final int R1 = KeyEvent.KEYCODE_D;
-    public static final int L2 = KeyEvent.KEYCODE_R;
-    public static final int R2 = KeyEvent.KEYCODE_S;
+    // Touch buttons / default pad buttons -> game keys
+    public static final int A = KeyEvent.KEYCODE_V;   // jump
+    public static final int B = KeyEvent.KEYCODE_C;   // attack
+    public static final int X = KeyEvent.KEYCODE_X;   // special
+    public static final int Y = KeyEvent.KEYCODE_S;   // final combo
+    public static final int L1 = KeyEvent.KEYCODE_A;  // police
+    public static final int R1 = KeyEvent.KEYCODE_D;  // back attack
+    public static final int L2 = KeyEvent.KEYCODE_B;  // special combo
+    public static final int R2 = KeyEvent.KEYCODE_B;  // special combo
     public static final int START = KeyEvent.KEYCODE_ENTER;
     public static final int BACK = KeyEvent.KEYCODE_ESCAPE;
 
@@ -37,11 +38,12 @@ public final class Keys {
     public static final int[] TARGETS = {
             KeyEvent.KEYCODE_X, KeyEvent.KEYCODE_C, KeyEvent.KEYCODE_V,
             KeyEvent.KEYCODE_B, KeyEvent.KEYCODE_S, KeyEvent.KEYCODE_A, KeyEvent.KEYCODE_D,
-            KeyEvent.KEYCODE_R, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_ESCAPE };
+            KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_ESCAPE };
 
     public static final String[] TARGET_LABELS = {
-            "Tecla X", "Tecla C", "Tecla V", "Tecla B", "Tecla S", "Tecla A", "Tecla D",
-            "Tecla R", "Enter (Start / pausa)", "Esc (menú / atrás)" };
+            "Especial (tecla X)", "Ataque (tecla C)", "Salto (tecla V)", "Combo especial (tecla B)",
+            "Combo final (tecla S)", "Policía (tecla A)", "Golpear atrás (tecla D)",
+            "Start / pausa (Enter)", "Menú / atrás (Esc)" };
 
     /** Directions are fixed: they never go through the table. */
     public static int direction(int keyCode) {
@@ -66,7 +68,7 @@ public final class Keys {
         m.put(KeyEvent.KEYCODE_BUTTON_R2, R2);
         // Six-button pads (Mega Drive / Saturn layout)
         m.put(KeyEvent.KEYCODE_BUTTON_C, R1);
-        m.put(KeyEvent.KEYCODE_BUTTON_Z, L1);
+        m.put(KeyEvent.KEYCODE_BUTTON_Z, Y);
         m.put(KeyEvent.KEYCODE_BUTTON_START, START);
         m.put(KeyEvent.KEYCODE_BUTTON_SELECT, BACK);
         m.put(KeyEvent.KEYCODE_BUTTON_MODE, BACK);
