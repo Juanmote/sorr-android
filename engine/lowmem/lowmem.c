@@ -132,7 +132,7 @@ void *lowmem_malloc(size_t size)
     if (p) memset(p, 0, size);
     if (!p) {
         static int warned;
-        if (!warned) { warned = 1; fprintf(stderr, "lowmem: low arena exhausted, falling back to system heap\n"); }
+        if (!warned) { warned = 1; fprintf(stderr, "lowmem: low arena exhausted (%zu bytes), falling back to system heap\n", size); }
         p = __real_malloc(size);
     }
     return p;

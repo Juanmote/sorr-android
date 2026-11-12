@@ -1,6 +1,6 @@
 # Estado del proyecto: port Android de Streets of Rage Remake
 
-Última actualización: 12 de noviembre de 2026 (versión 7 de la APK).
+Última actualización: 12 de noviembre de 2026 (versión 8 de la APK).
 
 ## Qué es
 
@@ -84,13 +84,55 @@ consola; la parte técnica la hace Claude.
   A policía, D golpear atrás (R no hace nada). Botones de serie: X=X, B=ataque, A=salto, R2 y L2=combo
   especial, Y y Z=combo final, L1=policía, R1 y C=golpear atrás. El lanzador muestra las acciones.
 
+## Entregado en la versión 8 (12-11-2026), pendiente de probar
+
+- **Entorno nuevo y firma nueva**: el entorno de la sesión anterior se perdió y con él `sorr-release.jks`. La v8 va
+  firmada con una clave nueva: hay que DESINSTALAR la versión anterior una vez (las partidas y perfiles están en la
+  carpeta del juego, no se pierden; sí las opciones del lanzador). La clave sigue SIN estar en el repositorio; para no
+  perderla otra vez, el usuario puede guardar una copia de `sorr-release.jks` (se le ha ofrecido).
+- Icono: el dibujo se ha reducido (~66 %) para que el logo con la llama quepa en la zona segura del icono adaptable
+  (círculo de 66 dp de 108); antes se cortaban los lados. Iconos antiguos sacados del centro del nuevo.
+- Controles táctiles con la plantilla del usuario (`res/drawable-nodpi/tc_*.webp`, recortados del JPG con el fondo
+  negro convertido en transparencia; script en el chat, no en el repo). Cruceta abajo a la izquierda; Ataque, Especial
+  y Salto redondos abajo a la derecha; Golpear atrás y Combo especial (pastillas) encima, Combo final encima de esas;
+  Policía encima de la cruceta; MENÚ y START (pastilla vacía con texto) abajo en el centro. La parte de arriba queda
+  libre por el marcador. Pulsado: más claro, opaco y algo más pequeño. La opacidad 15-90 % del lanzador se convierte
+  en 36-92 %. Un toque encima de un botón siempre cuenta para él (antes que la zona ampliada de la cruceta).
+- **Juego en red** (`engine/modules/libnet/`), mismo modelo que Outfoxies (net.c, inet.c, inet_code.c traídos de
+  `Juanmote/outfoxies-android` y adaptados): el anfitrión ejecuta el juego y manda imagen y sonido; el invitado manda
+  sus botones, que entran como las teclas del JUGADOR 2 de la partida guardada. El invitado no necesita los datos.
+  - TCP 47820 (UDP 47820 preguntas "SORQ1" / respuestas "SORN1", anuncios al 47821). `NET_VERSION` 1.
+  - Vídeo: la pantalla del motor (RGB565, 416x240 o 320x240) sin pérdida: XOR con el fotograma anterior desplazado
+    + deflate (miniz). Si la pantalla no cambia no se manda nada. Medido en la fase 1 con dos jugadores: 9-13 KB por
+    fotograma (5-6 Mbit/s); menús 1-6 KB.
+  - Sonido: `Mix_SetPostMix` en el anfitrión (mod_sound.c llama a `sorrnet_audio_open`), a la mitad de frecuencia en
+    ADPCM. El invitado lo reproduce con SDL (máx. ~120 ms de retraso).
+  - Teclas del 2P (sorrnet.c, `load_p2_keys`): `savegame/savegame.sor` posiciones 1224-1264 (arriba, abajo,
+    izquierda, derecha, especial, ataque, salto, policía, combo especial, combo final, golpear atrás; de serie
+    8 5 4 6 J K L H I O P, códigos BennuGD 9 6 5 7 36 37 38 35 23 24 25) y su START en 892 (U = 22; el del 1P,
+    Enter, en 888). Se inyectan en `key()` (mod_key.c → `sorrnet_key`). Se releen al entrar el invitado.
+  - Internet: igual que Outfoxies (UPnP + código de 8 letras; si no se puede entrar, servidor intermedio bore,
+    `bore.pub:7835`, cambiable con la preferencia `net_relay` → `SORR_RELAY_SERVER`).
+  - Java: tarjeta "Juego en red" en el lanzador (Crear partida / Unirse en la misma wifi (búsqueda UDP en Java) /
+    Unirse por internet con código o IP). `GameActivity` recibe `EXTRA_NET` ("host", "join:ip", "code:XXXX") →
+    `SORR_NET`; el invitado arranca con la carpeta interna de la app y `main.c` llama a `sorrnet_guest_main()` sin
+    cargar el juego. Encima del juego, un texto con `nativeNetStatus()` (JNI en sorrnet.c): IP de la wifi y código
+    de internet mientras no hay invitado, avisos al entrar o salir. Invitado: MENÚ dos veces = salir.
+  - Probado en Linux con dos procesos (wifi simulada en 127.0.0.1 y servidor bore falso de Outfoxies): el invitado
+    ve el juego, mueve el cursor del 2P, elige personaje con START y juega con Blaze; llega el sonido; por el
+    servidor intermedio también entra. SIN PROBAR EN CONSOLAS.
+- Pruebas en escritorio (`engine/` compilado para Linux, ver abajo): `SORR_KEYS="fotograma:codigo:duracion;..."`
+  pulsa teclas de BennuGD (la pantalla de título necesita mantener Enter ~1 s), `SORR_SHOT=prefijo SORR_SHOTS=f1,f2`
+  capturas PPM, `SORR_FRAMES=n` sale, `SORR_KEYLOG=1` qué teclas consulta el juego. Invitado: `SORR_GKEYS=
+  "vuelta:bits:duracion"` (bits NETB_* de net.h). `SORR_NETLOG=1` tamaño del vídeo. La carpeta de pruebas necesita
+  `palettes/` (no la tenemos: se generan `.pal` con la paleta de cada FPG de `SorR.dat`).
+  Compilar para Linux: `cmake -S engine -B build-linux` (paquetes libsdl2-dev, libsdl2-mixer-dev, libpng-dev) y
+  copiar el binario como `bgdi` (no enlace simbólico) junto a `SorR.dat`.
+
 ## Pendiente
 
-1. **Juego en red.** El usuario lo quiere "como en Outfoxies" (hecho en otro chat). El juego no lo trae:
-   habría que sincronizar las entradas de los dos jugadores en el motor (mismo `SorR.dat`, misma partida
-   y opciones, misma semilla aleatoria). Para probarlo en Linux con dos copias hace falta `SorR.dat`.
+1. Probar el juego en red en dos consolas (wifi y por internet con bore.pub).
 2. El usuario irá apuntando más mejoras según juegue.
-
 ## Notas
 
 - El registro mostraba que el juego pide 960x544 al iniciar y luego 416x240: su carpeta de datos

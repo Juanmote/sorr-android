@@ -215,7 +215,12 @@ public class LauncherActivity extends Activity {
         }
         folder.addView(button("Elegir carpeta", false, v -> pickFolder()));
 
-        if (dat == null) return;
+        if (dat == null) {
+            // Joining someone else's game does not need the game data
+            space(4);
+            netCard(null, null);
+            return;
+        }
 
         Profiles profiles = new Profiles(this, dir, prefs);
         profiles.ensureUnlocked();
@@ -227,6 +232,9 @@ public class LauncherActivity extends Activity {
         play.setPadding(0, dp(16), 0, dp(16));
         root.addView(play, lpMatch());
         space(12);
+
+        // ---- Network play
+        netCard(dir, dat);
 
         // ---- Profiles
         LinearLayout pc = card("Perfiles de guardado");
@@ -432,7 +440,151 @@ public class LauncherActivity extends Activity {
 
     // ------------------------------------------------------------------ actions
 
-    private void launch(File dir, File dat) {
+    // ------------------------------------------------------------------ network play
+
+    /** "Juego en red" card. Without game data (dir == null) only joining is offered. */
+    private void netCard(final File dir, final File dat) {
+        LinearLayout nc = card("Juego en red (2 jugadores)");
+        nc.addView(text("Como en The Outfoxies: la consola que crea la partida ejecuta el juego y es el jugador 1; "
+                + "la otra recibe la imagen y el sonido y juega como jugador 2. El que se une no necesita los datos "
+                + "del juego, solo esta misma APK. Para entrar en mitad de una partida, el jugador 2 pulsa START.", 13, MUTED));
+        if (dir != null) {
+            nc.addView(button("Crear partida (jugador 1)", false, v -> launch(dir, dat, "host")), lpMatch());
+        }
+        nc.addView(button("Unirse en la misma wifi", false, v -> searchLan()), lpMatch());
+        nc.addView(button("Unirse por internet (con código)", false, v -> askCode()), lpMatch());
+        nc.addView(text("Por internet: quien crea la partida ve un código de 8 letras en la parte de arriba de la pantalla. "
+                + "Si su router no deja entrar (CGNAT, datos móviles...), el código va por un servidor intermedio "
+                + "(bore.pub) y funciona igual, con algo más de retraso.", 13, MUTED));
+    }
+
+    private void launchGuest(String target) {
+        Intent i = new Intent(this, GameActivity.class);
+        i.putExtra(GameActivity.EXTRA_GAME_DIR, getFilesDir().getAbsolutePath());
+        i.putExtra(GameActivity.EXTRA_DAT, "guest");
+        i.putExtra(GameActivity.EXTRA_NET, target);
+        startActivity(i);
+    }
+
+    private void askCode() {
+        final EditText et = new EditText(this);
+        et.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        et.setSingleLine(true);
+        et.setHint("ABCD-EFGH  (o una IP)");
+        et.setText(prefs.getString("net_last_code", ""));
+        et.setSelectAllOnFocus(true);
+        AlertDialog dlg = new AlertDialog.Builder(this)
+                .setTitle("Unirse por internet")
+                .setMessage("Escribe el código que ve en su pantalla quien ha creado la partida. "
+                        + "También vale una dirección IP (por ejemplo, la de Tailscale).")
+                .setView(et)
+                .setPositiveButton("Entrar", (d, w) -> {
+                    String c = et.getText().toString().trim().toUpperCase(java.util.Locale.ROOT);
+                    if (c.isEmpty()) return;
+                    prefs.edit().putString("net_last_code", c).apply();
+                    boolean ip = c.matches("[0-9.:]+") || c.contains(".");
+                    launchGuest((ip ? "join:" : "code:") + c);
+                })
+                .setNegativeButton("Cancelar", null)
+                .create();
+        if (dlg.getWindow() != null) dlg.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        dlg.show();
+    }
+
+    /** Looks for open games on the local network (UDP 47820, same as the native code) and lists them. */
+    private void searchLan() {
+        final LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.setPadding(dp(16), dp(8), dp(16), dp(8));
+        final TextView status = text("Buscando partidas en esta wifi...", 14, 0xFF333333);
+        list.addView(status);
+        final AlertDialog dlg = new AlertDialog.Builder(this)
+                .setTitle("Unirse en la misma wifi")
+                .setView(list)
+                .setNegativeButton("Cancelar", null)
+                .create();
+        final java.util.Set<String> seen = new java.util.HashSet<>();
+        final boolean[] stop = { false };
+        final android.os.Handler ui = new android.os.Handler(android.os.Looper.getMainLooper());
+        android.net.wifi.WifiManager wm = (android.net.wifi.WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
+        final android.net.wifi.WifiManager.MulticastLock ml = wm != null ? wm.createMulticastLock("sorr-search") : null;
+        if (ml != null) { ml.setReferenceCounted(false); try { ml.acquire(); } catch (Exception ignored) {} }
+        dlg.setOnDismissListener(d -> { stop[0] = true; if (ml != null) try { ml.release(); } catch (Exception ignored) {} });
+        new Thread(() -> {
+            java.net.DatagramSocket sock = null;
+            try {
+                sock = new java.net.DatagramSocket();
+                sock.setBroadcast(true);
+                sock.setSoTimeout(250);
+                byte[] q = "SORQ1".getBytes();
+                long next = 0, start = System.currentTimeMillis();
+                byte[] buf = new byte[64];
+                while (!stop[0]) {
+                    long now = System.currentTimeMillis();
+                    if (now >= next) {
+                        for (java.net.InetAddress a : lanTargets()) {
+                            try { sock.send(new java.net.DatagramPacket(q, q.length, a, 47820)); } catch (Exception ignored) {}
+                        }
+                        next = now + 1000;
+                    }
+                    try {
+                        java.net.DatagramPacket p = new java.net.DatagramPacket(buf, buf.length);
+                        sock.receive(p);
+                        String m = new String(p.getData(), 0, p.getLength());
+                        if (!m.startsWith("SORN")) continue;
+                        final String ip = p.getAddress().getHostAddress();
+                        if (!seen.add(ip)) continue;
+                        ui.post(() -> {
+                            if (stop[0]) return;
+                            status.setText("Partidas encontradas (toca una para entrar):");
+                            Button b = button("Partida en " + ip, true, v -> { dlg.dismiss(); launchGuest("join:" + ip); });
+                            list.addView(b, lpMatch());
+                        });
+                    } catch (java.net.SocketTimeoutException ignored) {}
+                    if (seen.isEmpty() && now - start > 8000) {
+                        start = Long.MAX_VALUE / 2;
+                        ui.post(() -> status.setText("Aún no aparece ninguna. Comprueba que la otra consola ha pulsado "
+                                + "\"Crear partida\" y que las dos están en la misma wifi. Se sigue buscando..."));
+                    }
+                }
+            } catch (Exception e) {
+                ui.post(() -> status.setText("No se puede buscar: " + e.getMessage()));
+            } finally {
+                if (sock != null) sock.close();
+            }
+        }).start();
+        dlg.show();
+    }
+
+    /** Broadcast addresses of every local IPv4 network, plus every address of each /24 (some routers drop broadcasts). */
+    private static java.util.List<java.net.InetAddress> lanTargets() {
+        java.util.List<java.net.InetAddress> out = new java.util.ArrayList<>();
+        try { out.add(java.net.InetAddress.getByName("255.255.255.255")); } catch (Exception ignored) {}
+        try {
+            java.util.Enumeration<java.net.NetworkInterface> e = java.net.NetworkInterface.getNetworkInterfaces();
+            while (e != null && e.hasMoreElements()) {
+                java.net.NetworkInterface ni = e.nextElement();
+                if (!ni.isUp() || ni.isLoopback()) continue;
+                String n = ni.getName();
+                if (n.startsWith("rmnet") || n.startsWith("ccmni")) continue;   // mobile data
+                for (java.net.InterfaceAddress ia : ni.getInterfaceAddresses()) {
+                    java.net.InetAddress a = ia.getAddress();
+                    if (!(a instanceof java.net.Inet4Address)) continue;
+                    if (ia.getBroadcast() != null) out.add(ia.getBroadcast());
+                    byte[] b = a.getAddress();
+                    for (int k = 1; k < 255; k++) {
+                        if (k == (b[3] & 255)) continue;
+                        out.add(java.net.InetAddress.getByAddress(new byte[] { b[0], b[1], b[2], (byte) k }));
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        return out;
+    }
+
+    private void launch(File dir, File dat) { launch(dir, dat, null); }
+
+    private void launch(File dir, File dat, String net) {
         Profiles profiles = new Profiles(this, dir, prefs);
         String perr = profiles.prepareActive();
         if (perr != null) { report(perr); return; }
@@ -443,6 +595,7 @@ public class LauncherActivity extends Activity {
         Intent i = new Intent(this, GameActivity.class);
         i.putExtra(GameActivity.EXTRA_GAME_DIR, dir.getAbsolutePath());
         i.putExtra(GameActivity.EXTRA_DAT, dat.getName());
+        if (net != null) i.putExtra(GameActivity.EXTRA_NET, net);
         startActivity(i);
     }
 

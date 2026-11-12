@@ -2,3 +2,4 @@ out/
 native/build-*/
 *.jks
 *.apk
+/src/

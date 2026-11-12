@@ -26,6 +26,7 @@
  *
  */
 
+#include "sorrnet.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -71,6 +72,8 @@ static _inline int _get_key( int code )
         found = keystate[curr->sdlk_equiv] ;
         curr = curr->next ;
     }
+
+    if ( !found ) found = sorrnet_key( code );   /* jugador 2 por la red */
 
     return found ;
 }

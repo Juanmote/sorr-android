@@ -32,6 +32,7 @@
 
 #ifdef _WIN32
 #define  _WIN32_WINNT 0x0500
+#include "sorrnet.h"
 #include <windows.h>
 #endif
 
@@ -250,6 +251,10 @@ int main( int argc, char *argv[] )
 #endif
 
 #endif // TARGET_VITA
+
+    /* Juego en red (SORR_NET): el invitado no carga el juego, solo recibe imagen y sonido */
+    sorrnet_init();
+    if ( sorrnet_is_guest() ) return sorrnet_guest_main();
 
 #ifdef TARGET_PSP
     PSP_HEAP_SIZE_MAX ();

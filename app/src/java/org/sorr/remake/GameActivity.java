@@ -17,6 +17,30 @@ public class GameActivity extends SDLActivity implements TouchOverlay.KeySink {
 
     public static final String EXTRA_GAME_DIR = "gameDir";
     public static final String EXTRA_DAT = "datFile";
+    /** Network play: "host", "join:<ip>" or "code:<ABCD-EFGH>" (see engine/modules/libnet). */
+    public static final String EXTRA_NET = "net";
+
+    /** One or more lines to show over the game ("" = nothing). Implemented in libmain (sorrnet.c). */
+    static native String nativeNetStatus();
+
+    private String net;
+    private android.widget.TextView netText;
+    private android.net.wifi.WifiManager.MulticastLock netLock;
+    private final android.os.Handler netHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable netPoll = new Runnable() {
+        @Override public void run() {
+            String s = "";
+            try { s = nativeNetStatus(); } catch (Throwable ignored) {}
+            if (netText != null) {
+                if (s == null || s.isEmpty()) netText.setVisibility(View.GONE);
+                else {
+                    if (!s.equals(netText.getText().toString())) netText.setText(s);
+                    netText.setVisibility(View.VISIBLE);
+                }
+            }
+            netHandler.postDelayed(this, 300);
+        }
+    };
 
     private TouchOverlay overlay;
     private String touchMode;      // auto | never
@@ -39,6 +63,12 @@ public class GameActivity extends SDLActivity implements TouchOverlay.KeySink {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         SharedPreferences p = getSharedPreferences(LauncherActivity.PREFS, MODE_PRIVATE);
+        net = getIntent().getStringExtra(EXTRA_NET);
+        try {
+            android.system.Os.setenv("SORR_NET", net != null ? net : "", true);
+            String relay = p.getString("net_relay", "");
+            if (relay != null && !relay.isEmpty()) android.system.Os.setenv("SORR_RELAY_SERVER", relay, true);
+        } catch (Exception ignored) {}
         try {
             android.system.Os.setenv("SORR_ASPECT", LauncherActivity.aspectMode(p), true);
             android.system.Os.setenv("SDL_JOYSTICK_HIDAPI", "0", true);
@@ -57,6 +87,7 @@ public class GameActivity extends SDLActivity implements TouchOverlay.KeySink {
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             if (hasGamepadConnected()) hideOverlay();
         }
+        if (net != null && !net.isEmpty() && mLayout != null) startNetUi();
     }
 
     @Override
@@ -80,8 +111,41 @@ public class GameActivity extends SDLActivity implements TouchOverlay.KeySink {
         }
     }
 
+    /** Status line over the game (host: address / internet code; guest: connecting, errors...). */
+    private void startNetUi() {
+        try {
+            android.net.wifi.WifiManager wm = (android.net.wifi.WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
+            if (wm != null) {
+                netLock = wm.createMulticastLock("sorr-net");
+                netLock.setReferenceCounted(false);
+                netLock.acquire();
+            }
+        } catch (Exception ignored) {}
+        netText = new android.widget.TextView(this);
+        netText.setTextColor(0xFFFFFFFF);
+        netText.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 13);
+        netText.setGravity(android.view.Gravity.CENTER);
+        netText.setShadowLayer(3f, 0f, 1f, 0xFF000000);
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setColor(0xB0000000);
+        bg.setCornerRadius(18f);
+        netText.setBackground(bg);
+        int pd = (int) (8 * getResources().getDisplayMetrics().density);
+        netText.setPadding(pd * 2, pd, pd * 2, pd);
+        netText.setVisibility(View.GONE);
+        android.widget.RelativeLayout.LayoutParams lp = new android.widget.RelativeLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.addRule(android.widget.RelativeLayout.CENTER_HORIZONTAL);
+        lp.addRule(android.widget.RelativeLayout.ALIGN_PARENT_TOP);
+        lp.topMargin = pd;
+        mLayout.addView(netText, lp);
+        netHandler.postDelayed(netPoll, 500);
+    }
+
     @Override
     protected void onDestroy() {
+        netHandler.removeCallbacks(netPoll);
+        if (netLock != null) try { netLock.release(); } catch (Exception ignored) {}
         super.onDestroy();
         // The engine keeps global state: always start it in a fresh process
         if (isFinishing()) android.os.Process.killProcess(android.os.Process.myPid());

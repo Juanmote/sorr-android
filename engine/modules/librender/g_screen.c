@@ -31,6 +31,7 @@
 
 #define __LIB_RENDER
 #include "librender.h"
+#include "sorrnet.h"
 
 /* --------------------------------------------------------------------------- */
 
@@ -176,6 +177,7 @@ void gr_unlock_screen()
     // I removed the dirty rectangles code, for the time being
     if ( SDL_MUSTLOCK( screen ) ) SDL_UnlockSurface( screen ) ;
     if ( waitvsync ) gr_wait_vsync();
+    sorrnet_frame( screen->pixels, screen->w, screen->h, screen->pitch, screen->format->BitsPerPixel );
     SDL_UpdateTexture(texture, NULL, screen->pixels, screen->pitch);
     SDL_RenderClear(renderer);
 #if defined(TARGET_ANDROID)

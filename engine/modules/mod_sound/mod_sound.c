@@ -30,6 +30,7 @@
 #pragma comment (lib, "SDL_mixer")
 #endif
 
+#include "sorrnet.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -201,6 +202,7 @@ static int sound_init()
         {
             GLODWORD( mod_sound, SOUND_CHANNELS ) <= 32 ? Mix_AllocateChannels( GLODWORD( mod_sound, SOUND_CHANNELS ) ) : Mix_AllocateChannels( 32 ) ;
             Mix_QuerySpec( &audio_rate, &audio_format, &audio_channels );
+            sorrnet_audio_open( audio_rate, audio_format, audio_channels );
             audio_mix_channels = Mix_AllocateChannels( -1 ) ;
             GLODWORD( mod_sound, SOUND_CHANNELS ) = audio_mix_channels ;
 

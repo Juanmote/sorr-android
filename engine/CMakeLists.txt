@@ -99,6 +99,12 @@ set(BGDRTM_SOURCE_FILES
   ${CMAKE_CURRENT_SOURCE_DIR}/modules/mod_wm/mod_wm.c
   ${CMAKE_CURRENT_SOURCE_DIR}/modules/mod_sys/mod_sys.c
   ${CMAKE_CURRENT_SOURCE_DIR}/modules/mod_flic/mod_flic.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/modules/libnet/net.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/modules/libnet/inet.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/modules/libnet/inet_code.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/modules/libnet/sorrnet.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/modules/libnet/guest.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/modules/libnet/miniz.c
   ${CMAKE_CURRENT_SOURCE_DIR}/lowmem/lowmem.c
   ${CMAKE_CURRENT_SOURCE_DIR}/lowmem/tlsf.c)
 
@@ -161,6 +167,7 @@ target_include_directories(bgdrtm PRIVATE
                     ${CMAKE_CURRENT_SOURCE_DIR}/modules/mod_multi/
                     ${CMAKE_CURRENT_SOURCE_DIR}/modules/mod_chipmunk/
                     ${CMAKE_CURRENT_SOURCE_DIR}/modules/mod_iap/
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/libnet/
                     ${SDL2_INCLUDE_DIR}
                     ${SDL2_MIXER_INCLUDE_DIRS}
                     ${ZLIB_INCLUDE_DIRS}
@@ -190,6 +197,8 @@ endif()
 target_compile_definitions(${BGDI_TARGET} PUBLIC -D__BGDI__)
 target_include_directories(${BGDI_TARGET} PRIVATE
                     ${CMAKE_CURRENT_SOURCE_DIR}/core/bgdi/include
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/libnet
+                    ${SDL2_INCLUDE_DIR}
                     ${CMAKE_CURRENT_SOURCE_DIR}/core/include
                     ${CMAKE_CURRENT_SOURCE_DIR}/core/bgdrtm/include/)
 
