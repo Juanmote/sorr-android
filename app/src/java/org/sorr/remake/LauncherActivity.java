@@ -48,7 +48,17 @@ public class LauncherActivity extends Activity {
         if (a == null) a = p.getBoolean(KEY_STRETCH, false) ? "stretch" : "fit";
         return a;
     }
-    public static final String KEY_SMOOTH = "video_smooth";
+    public static final String KEY_SMOOTH = "video_smooth";     // old setting (pre filters)
+    public static final String KEY_FILTER = "video_filter";     // sharp | smooth | sharpsmooth | scan | crt | crtcurve
+    public static final String KEY_COLORS = "video_colors";     // original | tv | vivid | night | sepia | green
+    public static final String KEY_VIB = "vibration";           // 0-100 (0 = off)
+    public static final String KEY_MUSIC = "menu_music";        // launcher theme on/off
+
+    public static String filterMode(SharedPreferences p) {
+        String f = p.getString(KEY_FILTER, null);
+        if (f == null) f = p.getBoolean(KEY_SMOOTH, false) ? "smooth" : "sharp";
+        return f;
+    }
 
     private static final int REQ_TREE = 10;
     private static final int REQ_PERM = 11;
@@ -56,12 +66,25 @@ public class LauncherActivity extends Activity {
     private SharedPreferences prefs;
     private LinearLayout root;
 
-    private static final int BG = 0xFF0B0C12;
-    private static final int CARD = 0xE61F232C;
+    // Theme taken from the game's logo: fire orange / yellow on near black, with the blue of "OF RAGE"
+    private static final int BG = 0xFF0C0809;
+    private static final int BG_TOP = 0xFF2B0D07;
+    private static final int CARD = 0xE0150F12;
+    private static final int CARD_EDGE = 0x55FF6A1F;
     private boolean mapScreen;   // showing the gamepad button table
-    private static final int ACCENT = 0xFFE0412F;
-    private static final int TEXT = 0xFFF2F2F2;
-    private static final int MUTED = 0xFFA0A6B2;
+    private static final int FIRE_RED = 0xFFE5311B;
+    private static final int FIRE_ORANGE = 0xFFFF7A18;
+    private static final int FIRE_YELLOW = 0xFFFFC928;
+    private static final int RAGE_BLUE = 0xFF3D9BE0;
+    private static final int BTN = 0xFF241A1D;
+    private static final int BTN_FOCUS = 0xFF3A2526;
+    private static final int TEXT = 0xFFF6EEE8;
+    private static final int MUTED = 0xFFB9A79E;
+    private static final int WARN = 0xFFFFB74D;
+    private static final int OK = 0xFF9CCC65;
+
+    private Typeface fontTitle, fontBody;
+    private android.media.MediaPlayer music;
 
     @Override
     protected void onCreate(Bundle b) {
@@ -69,6 +92,8 @@ public class LauncherActivity extends Activity {
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        try { fontTitle = Typeface.createFromAsset(getAssets(), "fonts/Bangers-Regular.ttf"); } catch (Exception e) { fontTitle = Typeface.DEFAULT_BOLD; }
+        try { fontBody = Typeface.createFromAsset(getAssets(), "fonts/BarlowCondensed-Medium.ttf"); } catch (Exception e) { fontBody = Typeface.DEFAULT; }
         android.widget.FrameLayout frame = new android.widget.FrameLayout(this);
         frame.addView(new ArtView(this), new android.widget.FrameLayout.LayoutParams(
                 android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
@@ -79,6 +104,11 @@ public class LauncherActivity extends Activity {
         int pad = dp(20);
         root.setPadding(pad, pad, pad, pad);
         sv.addView(root);
+        // No grey/white "default focus highlight" over whole areas: every control draws its own focus
+        sv.setDefaultFocusHighlightEnabled(false);
+        root.setDefaultFocusHighlightEnabled(false);
+        frame.setDefaultFocusHighlightEnabled(false);
+        sv.setFocusable(false);
         // Wide screens: options on the left, artwork free on the right.
         // Nearly square screens: options over the (dimmed) artwork.
         android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
@@ -114,7 +144,7 @@ public class LauncherActivity extends Activity {
         protected void onDraw(android.graphics.Canvas cv) {
             int w = getWidth(), h = getHeight();
             scrim.setShader(new android.graphics.LinearGradient(0, 0, 0, h,
-                    0xFF1A1630, BG, android.graphics.Shader.TileMode.CLAMP));
+                    BG_TOP, BG, android.graphics.Shader.TileMode.CLAMP));
             cv.drawRect(0, 0, w, h, scrim);
             if (art == null || w == 0 || h == 0) return;
             boolean wide = isWide(w, h);
@@ -153,6 +183,38 @@ public class LauncherActivity extends Activity {
         super.onResume();
         render();
         dumpLogcatIfPending();
+        updateMusic();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (music != null) try { music.pause(); } catch (Exception ignored) {}
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (music != null) try { music.release(); } catch (Exception ignored) {}
+        music = null;
+        super.onDestroy();
+    }
+
+    /** Launcher theme (res/raw/menu_theme.ogg, made for this port: tools/compose_menu_theme.py), looped. */
+    private void updateMusic() {
+        boolean on = prefs.getBoolean(KEY_MUSIC, true);
+        if (!on) {
+            if (music != null) try { music.pause(); } catch (Exception ignored) {}
+            return;
+        }
+        try {
+            if (music == null) {
+                music = android.media.MediaPlayer.create(this, R.raw.menu_theme);
+                if (music == null) return;
+                music.setLooping(true);
+                music.setVolume(0.55f, 0.55f);
+            }
+            if (!music.isPlaying()) music.start();
+        } catch (Exception ignored) {}
     }
 
     /** After a game session, save this app's system log next to the game data (sorr_logcat.txt). */
@@ -180,23 +242,53 @@ public class LauncherActivity extends Activity {
     // ------------------------------------------------------------------ UI
 
     private void render() {
+        // Keep the gamepad / d-pad focus on the same control after rebuilding the screen
+        int focusIdx = -1;
+        View f = getCurrentFocus();
+        if (f != null) focusIdx = root.getFocusables(View.FOCUS_DOWN).indexOf(f);
         root.removeAllViews();
+        build();
+        final int want = focusIdx;
+        if (want >= 0) {
+            root.post(() -> {
+                java.util.ArrayList<View> l = root.getFocusables(View.FOCUS_DOWN);
+                if (!l.isEmpty()) l.get(Math.min(want, l.size() - 1)).requestFocus();
+            });
+        }
+    }
 
-        TextView title = text("Streets of Rage Remake", 26, TEXT);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
+    private void build() {
+        TextView title = text("STREETS OF RAGE", 38, TEXT);
+        title.setTypeface(fontTitle);
+        title.setLetterSpacing(0.04f);
+        fire(title);
         root.addView(title);
-        root.addView(text("Port Android (BennuGD + SDL2)", 14, MUTED));
-        TextView by = text("Ported by Juanmote", 14, 0xFFFFB04A);
-        by.setTypeface(Typeface.DEFAULT_BOLD);
-        root.addView(by);
-        space(16);
+        TextView rem = text("REMAKE  ·  PORT ANDROID", 22, TEXT);
+        rem.setTypeface(fontTitle);
+        rem.setLetterSpacing(0.06f);
+        fire(rem);
+        root.addView(rem);
+        TextView by = text("  PORTED BY JUANMOTE  ", 15, Color.WHITE);
+        by.setTypeface(fontTitle);
+        by.setLetterSpacing(0.08f);
+        GradientDrawable pill = new GradientDrawable();
+        pill.setColor(RAGE_BLUE);
+        pill.setCornerRadius(dp(4));
+        pill.setStroke(dp(2), Color.WHITE);
+        by.setBackground(pill);
+        by.setPadding(dp(8), dp(2), dp(8), dp(2));
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        blp.topMargin = dp(6);
+        root.addView(by, blp);
+        space(14);
 
         if (mapScreen) { renderMap(); return; }
 
         // ---- Storage permission
         if (!hasStorage()) {
             LinearLayout c = card("Permiso de almacenamiento");
-            c.addView(text("Hace falta acceso a archivos para leer los datos del juego y guardar partidas.", 14, MUTED));
+            c.addView(text("Hace falta acceso a archivos para leer los datos del juego y guardar partidas.", 15, MUTED));
             c.addView(button("Conceder permiso", true, v -> requestStorage()));
             return;
         }
@@ -205,13 +297,12 @@ public class LauncherActivity extends Activity {
         File dir = gameDir();
         File dat = findDat(dir);
         LinearLayout folder = card("Carpeta del juego");
-        folder.addView(text(dir.getAbsolutePath(), 14, TEXT));
+        folder.addView(text(dir.getAbsolutePath(), 15, TEXT));
         if (dat == null) {
-            TextView warn = text("No se encuentra SorR.dat en esta carpeta. Copia ahí el juego de PC "
-                    + "(SorR.dat, mod/, palettes/...) o elige otra carpeta.", 14, 0xFFFFB74D);
-            folder.addView(warn);
+            folder.addView(text("No se encuentra SorR.dat en esta carpeta. Copia ahí el juego de PC "
+                    + "(SorR.dat, mod/, palettes/...) o elige otra carpeta.", 15, WARN));
         } else {
-            folder.addView(text("Datos encontrados: " + dat.getName(), 14, 0xFF81C784));
+            folder.addView(text("Datos encontrados: " + dat.getName(), 15, OK));
         }
         folder.addView(button("Elegir carpeta", false, v -> pickFolder()));
 
@@ -219,17 +310,28 @@ public class LauncherActivity extends Activity {
             // Joining someone else's game does not need the game data
             space(4);
             netCard(null, null);
+            soundCard();
             return;
         }
 
         Profiles profiles = new Profiles(this, dir, prefs);
         profiles.ensureUnlocked();
+        final String moved = profiles.migrateOldSave();
+        if (moved != null) {
+            new AlertDialog.Builder(this)
+                    .setTitle("Perfiles")
+                    .setMessage("En la carpeta del juego ya había una partida con casi todo desbloqueado y se estaba usando "
+                            + "como perfil \"Principal\". Ahora está guardada como perfil \"" + moved + "\" y \"Principal\" "
+                            + "empieza desde cero. Para el juego con todo abierto está el perfil \"Unlocked\".")
+                    .setPositiveButton("Aceptar", null)
+                    .show();
+        }
 
         // ---- Play
         space(4);
-        Button play = button("JUGAR  (perfil: " + profiles.activeName() + ")", true, v -> launch(dir, dat));
-        play.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
-        play.setPadding(0, dp(16), 0, dp(16));
+        Button play = button("JUGAR   ·   perfil: " + profiles.activeName(), true, v -> launch(dir, dat));
+        play.setTextSize(TypedValue.COMPLEX_UNIT_SP, 26);
+        play.setPadding(0, dp(14), 0, dp(14));
         root.addView(play, lpMatch());
         space(12);
 
@@ -238,8 +340,9 @@ public class LauncherActivity extends Activity {
 
         // ---- Profiles
         LinearLayout pc = card("Perfiles de guardado");
-        pc.addView(text("Cada perfil tiene sus propias partidas, opciones y desbloqueables. "
-                + "\"Unlocked\" trae la tienda y todos los extras desbloqueados y no se puede borrar.", 13, MUTED));
+        pc.addView(text("Cada perfil tiene sus propias partidas, opciones y desbloqueables (se guardan en la carpeta "
+                + "sorr_profiles; savegame es siempre el perfil activo). \"Unlocked\" trae la tienda y todos los extras "
+                + "desbloqueados y no se puede borrar.", 14, MUTED));
         List<String> list = profiles.list();
         String active = profiles.activeName();
         for (String name : list) {
@@ -257,6 +360,7 @@ public class LauncherActivity extends Activity {
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                         LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
                 lp.leftMargin = dp(8);
+                lp.topMargin = dp(6);
                 row.addView(del, lp);
             }
             pc.addView(row, lpMatch());
@@ -271,7 +375,7 @@ public class LauncherActivity extends Activity {
             render();
         }), lpMatch());
         cc.addView(text("Automático: al usar un mando físico desaparecen todos los botones táctiles. "
-                + "Si tocas la pantalla vuelven a aparecer.", 13, MUTED));
+                + "Si tocas la pantalla vuelven a aparecer.", 14, MUTED));
         boolean kb = prefs.getBoolean(KEY_PAD_KEYBOARD, true);
         cc.addView(button(kb ? "Mando físico: listo para jugar (recomendado)" : "Mando físico: joystick (configurar en el juego)", false, v -> {
             prefs.edit().putBoolean(KEY_PAD_KEYBOARD, !kb).apply();
@@ -279,43 +383,85 @@ public class LauncherActivity extends Activity {
         }), lpMatch());
         cc.addView(text(kb
                 ? "El mando funciona directamente con la configuración de teclas del perfil. Para 2 jugadores con 2 mandos, cambia a modo joystick."
-                : "El juego verá los mandos como joysticks: configúralos en Options > Controls.", 13, MUTED));
+                : "El juego verá los mandos como joysticks: configúralos en Options > Controls.", 14, MUTED));
         if (kb) {
             cc.addView(button("Configurar botones del mando", false, v -> { mapScreen = true; render(); }), lpMatch());
             cc.addView(text("Elige qué botón del mando hace cada cosa. Sirve para cualquier mando, "
-                    + "también los de seis botones.", 13, MUTED));
+                    + "también los de seis botones.", 14, MUTED));
         }
-        cc.addView(slider("Opacidad de los botones", KEY_ALPHA, 50, 15, 90));
-        cc.addView(slider("Tamaño de los botones", KEY_SIZE, 100, 60, 140));
+        cc.addView(slider("Opacidad de los botones", KEY_ALPHA, 50, 15, 90, false));
+        cc.addView(slider("Tamaño de los botones", KEY_SIZE, 100, 60, 140, false));
 
         // ---- Video
         LinearLayout vc = card("Imagen");
-        final String aspect = aspectMode(prefs);
-        final String[] modes = { "fit", "crop", "mix", "stretch" };
-        final String[] labels = {
-                "Proporción: ORIGINAL (sin deformar, con bandas negras)",
-                "Proporción: RECORTAR (sin deformar, llena la pantalla cortando los bordes)",
-                "Proporción: MIXTA (mitad recorte, mitad estirado)",
-                "Proporción: ESTIRADA (llena la pantalla deformando)" };
-        int idx = 0;
-        for (int i = 0; i < modes.length; i++) if (modes[i].equals(aspect)) idx = i;
-        final int next = (idx + 1) % modes.length;
-        vc.addView(button(labels[idx], false, v -> {
-            prefs.edit().putString(KEY_ASPECT, modes[next]).apply();
-            render();
-        }), lpMatch());
-        vc.addView(text("Pulsa para cambiar. En pantallas casi cuadradas (8:7) prueba RECORTAR o MIXTA; "
-                + "el modo panorámico del propio juego se elige en sus opciones.", 13, MUTED));
-        boolean smooth = prefs.getBoolean(KEY_SMOOTH, false);
-        vc.addView(button(smooth ? "Filtro: SUAVIZADO" : "Filtro: PÍXELES NÍTIDOS", false, v -> {
-            prefs.edit().putBoolean(KEY_SMOOTH, !smooth).apply();
-            render();
-        }), lpMatch());
+        cycle(vc, "Proporción", KEY_ASPECT, aspectMode(prefs),
+                new String[] { "fit", "crop", "mix", "stretch" },
+                new String[] { "Original", "Recortar", "Mixta", "Estirada" },
+                new String[] { "Sin deformar, con bandas negras",
+                        "Sin deformar, llena la pantalla cortando los bordes. En pantallas casi cuadradas (8:7) prueba esta o Mixta",
+                        "Mitad recorte, mitad estirado",
+                        "Llena la pantalla deformando" });
+        cycle(vc, "Filtro", KEY_FILTER, filterMode(prefs),
+                new String[] { "sharp", "sharpsmooth", "smooth", "scan", "crt", "crtcurve" },
+                new String[] { "Nítida", "Nítida suavizada", "Suavizada", "Scanlines", "CRT", "CRT curvo" },
+                new String[] { "Píxeles tal cual, sin suavizar",
+                        "Píxeles nítidos con los bordes suavizados",
+                        "Algo borrosa, como cualquier pantalla moderna",
+                        "Líneas oscuras entre las del juego",
+                        "Tele de tubo: máscara de fósforo y resplandor",
+                        "Tele de tubo con la pantalla abombada" });
+        cycle(vc, "Colores", KEY_COLORS, prefs.getString(KEY_COLORS, "original"),
+                new String[] { "original", "tv", "vivid", "night", "sepia", "green" },
+                new String[] { "Original", "Tele antigua", "Vivos", "Nocturna", "Sepia", "Pantalla verde" },
+                new String[] { "Los colores del juego",
+                        "Negros algo levantados, menos contraste y un punto cálida",
+                        "Más contraste y saturación",
+                        "Sombras frías y luces cálidas",
+                        "Tonos de foto antigua",
+                        "Cuatro tonos de verde, como una portátil antigua" });
+        vc.addView(text("Toca para cambiar (con el mando, también izquierda y derecha). El modo panorámico del "
+                + "propio juego se elige en sus opciones.", 14, MUTED));
+
+        soundCard();
 
         space(8);
-        root.addView(text("Si algo falla, en la carpeta del juego se crean sorr_log.txt y sorr_logcat.txt con los detalles.", 12, MUTED));
-        root.addView(text("Motor: bennugd-monolithic (josebagar, isage). Partidas base: PortMaster. "
-                + "Streets of Rage Remake © Bombergames. Juego freeware, sin afiliación con SEGA.", 11, MUTED));
+        root.addView(text("Si algo falla, en la carpeta del juego se crean sorr_log.txt y sorr_logcat.txt con los detalles.", 13, MUTED));
+        root.addView(text("Motor: bennugd-monolithic (josebagar, isage). Partidas base: PortMaster. Música del lanzador "
+                + "original para este port. Fuentes: Bangers y Barlow (SIL OFL). "
+                + "Streets of Rage Remake © Bombergames. Juego freeware, sin afiliación con SEGA.", 12, MUTED));
+    }
+
+    private void soundCard() {
+        LinearLayout sc = card("Sonido y vibración");
+        sc.addView(slider("Vibración", KEY_VIB, 50, 0, 100, true));
+        sc.addView(text("Golpes, caídas, explosiones y la policía. Vibra el mando si tiene motor; si no, la consola.", 14, MUTED));
+        boolean m = prefs.getBoolean(KEY_MUSIC, true);
+        sc.addView(button(m ? "Música del menú: SÍ" : "Música del menú: NO", false, v -> {
+            prefs.edit().putBoolean(KEY_MUSIC, !m).apply();
+            updateMusic();
+            render();
+        }), lpMatch());
+    }
+
+    /** A setting that cycles through values: tap (or A) = next; with a gamepad, left / right too. */
+    private void cycle(LinearLayout parent, final String label, final String key, String current,
+                       final String[] values, final String[] names, final String[] helps) {
+        int idx = 0;
+        for (int i = 0; i < values.length; i++) if (values[i].equals(current)) idx = i;
+        final int cur = idx;
+        Button b = button(label + ":  ‹  " + names[idx].toUpperCase(java.util.Locale.ROOT) + "  ›", false,
+                v -> { prefs.edit().putString(key, values[(cur + 1) % values.length]).apply(); render(); });
+        b.setOnKeyListener((v, code, ev) -> {
+            if (code != android.view.KeyEvent.KEYCODE_DPAD_LEFT && code != android.view.KeyEvent.KEYCODE_DPAD_RIGHT) return false;
+            if (ev.getAction() == android.view.KeyEvent.ACTION_DOWN) {
+                int d = code == android.view.KeyEvent.KEYCODE_DPAD_LEFT ? -1 : 1;
+                prefs.edit().putString(key, values[(cur + d + values.length) % values.length]).apply();
+                render();
+            }
+            return true;
+        });
+        parent.addView(b, lpMatch());
+        parent.addView(text(helps[idx], 14, FIRE_YELLOW));
     }
 
     // ------------------------------------------------------------------ gamepad table
@@ -416,16 +562,21 @@ public class LauncherActivity extends Activity {
                 .show();
     }
 
-    private View slider(String label, String key, int def, int min, int max) {
+    private View slider(String label, String key, int def, int min, int max, boolean zeroIsOff) {
         LinearLayout l = new LinearLayout(this);
         l.setOrientation(LinearLayout.VERTICAL);
-        TextView t = text(label + ": " + prefs.getInt(key, def) + "%", 14, TEXT);
+        final TextView t = text(sliderText(label, prefs.getInt(key, def), zeroIsOff), 15, TEXT);
         SeekBar sb = new SeekBar(this);
         sb.setMax(max - min);
         sb.setProgress(prefs.getInt(key, def) - min);
+        sb.setKeyProgressIncrement(5);
+        sb.setDefaultFocusHighlightEnabled(false);
+        tint(sb);
         sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar s, int p, boolean u) {
-                t.setText(label + ": " + (p + min) + "%");
+                t.setText(sliderText(label, p + min, zeroIsOff));
+                // saved right away: with the d-pad there is no "stop tracking"
+                if (u) prefs.edit().putInt(key, p + min).apply();
             }
             @Override public void onStartTrackingTouch(SeekBar s) {}
             @Override public void onStopTrackingTouch(SeekBar s) {
@@ -436,6 +587,30 @@ public class LauncherActivity extends Activity {
         l.addView(sb, lpMatch());
         l.setPadding(0, dp(8), 0, 0);
         return l;
+    }
+
+    private static String sliderText(String label, int v, boolean zeroIsOff) {
+        return label + ": " + (zeroIsOff && v == 0 ? "NO" : v + "%");
+    }
+
+    /** SeekBar in the theme's colours, with a clear ring around the knob when it has the focus. */
+    private void tint(SeekBar sb) {
+        sb.setProgressTintList(android.content.res.ColorStateList.valueOf(FIRE_ORANGE));
+        sb.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFF5A4A48));
+        GradientDrawable knob = new GradientDrawable();
+        knob.setShape(GradientDrawable.OVAL);
+        knob.setSize(dp(20), dp(20));
+        knob.setColor(FIRE_YELLOW);
+        GradientDrawable knobF = new GradientDrawable();
+        knobF.setShape(GradientDrawable.OVAL);
+        knobF.setSize(dp(26), dp(26));
+        knobF.setColor(FIRE_YELLOW);
+        knobF.setStroke(dp(4), RAGE_BLUE);
+        android.graphics.drawable.StateListDrawable th = new android.graphics.drawable.StateListDrawable();
+        th.addState(new int[] { android.R.attr.state_focused }, knobF);
+        th.addState(new int[] {}, knob);
+        sb.setThumb(th);
+        sb.setPadding(dp(14), dp(10), dp(14), dp(10));
     }
 
     // ------------------------------------------------------------------ actions
@@ -681,14 +856,17 @@ public class LauncherActivity extends Activity {
         LinearLayout c = new LinearLayout(this);
         c.setOrientation(LinearLayout.VERTICAL);
         int p = dp(14);
-        c.setPadding(p, p, p, p);
+        c.setPadding(p, dp(10), p, p);
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(CARD);
-        bg.setCornerRadius(dp(12));
+        bg.setCornerRadius(dp(6));
+        bg.setStroke(dp(1), CARD_EDGE);
         c.setBackground(bg);
-        TextView t = text(title, 17, TEXT);
-        t.setTypeface(Typeface.DEFAULT_BOLD);
-        t.setPadding(0, 0, 0, dp(6));
+        TextView t = text(title.toUpperCase(java.util.Locale.ROOT), 24, TEXT);
+        t.setTypeface(fontTitle);
+        t.setLetterSpacing(0.05f);
+        fire(t);
+        t.setPadding(0, 0, 0, dp(2));
         c.addView(t);
         LinearLayout.LayoutParams lp = lpMatch();
         lp.bottomMargin = dp(12);
@@ -696,11 +874,24 @@ public class LauncherActivity extends Activity {
         return c;
     }
 
+    /** Text painted with the logo's fire gradient (red at the bottom, yellow at the top) and a dark outline shadow. */
+    private void fire(final TextView t) {
+        t.setShadowLayer(dp(2), 0, dp(1), 0xE0000000);
+        t.addOnLayoutChangeListener((v, l, top, r, b, ol, ot, or, ob) -> {
+            int h = b - top;
+            if (h <= 0) return;
+            t.getPaint().setShader(new android.graphics.LinearGradient(0, t.getPaddingTop(), 0, h - t.getPaddingBottom(),
+                    new int[] { FIRE_YELLOW, FIRE_ORANGE, FIRE_RED }, new float[] { 0.1f, 0.55f, 1f },
+                    android.graphics.Shader.TileMode.CLAMP));
+        });
+    }
+
     private TextView text(String s, int sp, int color) {
         TextView t = new TextView(this);
         t.setText(s);
         t.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
         t.setTextColor(color);
+        t.setTypeface(fontBody);
         t.setPadding(0, dp(2), 0, dp(2));
         return t;
     }
@@ -710,9 +901,39 @@ public class LauncherActivity extends Activity {
         b.setText(label);
         b.setAllCaps(false);
         b.setTextColor(primary ? Color.WHITE : TEXT);
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(primary ? ACCENT : 0xFF2C313C);
-        bg.setCornerRadius(dp(10));
+        b.setTypeface(primary ? fontTitle : fontBody);
+        b.setTextSize(TypedValue.COMPLEX_UNIT_SP, primary ? 21 : 17);
+        if (primary) {
+            b.setLetterSpacing(0.04f);
+            b.setShadowLayer(dp(2), 0, dp(1), 0xC0000000);
+        }
+        b.setStateListAnimator(null);
+        b.setDefaultFocusHighlightEnabled(false);
+        // normal / pressed / focused (gamepad, d-pad): the focused one gets a thick yellow frame
+        GradientDrawable n = new GradientDrawable();
+        GradientDrawable pr = new GradientDrawable();
+        GradientDrawable fo = new GradientDrawable();
+        if (primary) {
+            n.setOrientation(GradientDrawable.Orientation.TOP_BOTTOM);
+            n.setColors(new int[] { FIRE_ORANGE, FIRE_RED });
+            pr.setOrientation(GradientDrawable.Orientation.TOP_BOTTOM);
+            pr.setColors(new int[] { FIRE_YELLOW, FIRE_ORANGE });
+            fo.setOrientation(GradientDrawable.Orientation.TOP_BOTTOM);
+            fo.setColors(new int[] { 0xFFFF9A3A, FIRE_RED });
+            n.setStroke(dp(2), 0x66000000);
+        } else {
+            n.setColor(BTN);
+            n.setStroke(dp(1), 0x33FFFFFF);
+            pr.setColor(0xFF4A2A22);
+            fo.setColor(BTN_FOCUS);
+        }
+        pr.setStroke(dp(3), FIRE_YELLOW);
+        fo.setStroke(dp(3), FIRE_YELLOW);
+        for (GradientDrawable g : new GradientDrawable[] { n, pr, fo }) g.setCornerRadius(dp(6));
+        android.graphics.drawable.StateListDrawable bg = new android.graphics.drawable.StateListDrawable();
+        bg.addState(new int[] { android.R.attr.state_pressed }, pr);
+        bg.addState(new int[] { android.R.attr.state_focused }, fo);
+        bg.addState(new int[] {}, n);
         b.setBackground(bg);
         b.setOnClickListener(l);
         b.setPadding(dp(12), dp(10), dp(12), dp(10));

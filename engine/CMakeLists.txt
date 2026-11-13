@@ -104,6 +104,8 @@ set(BGDRTM_SOURCE_FILES
   ${CMAKE_CURRENT_SOURCE_DIR}/modules/libnet/inet_code.c
   ${CMAKE_CURRENT_SOURCE_DIR}/modules/libnet/sorrnet.c
   ${CMAKE_CURRENT_SOURCE_DIR}/modules/libnet/guest.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/modules/libnet/sorrvideo.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/modules/libnet/sorrvib.c
   ${CMAKE_CURRENT_SOURCE_DIR}/modules/libnet/miniz.c
   ${CMAKE_CURRENT_SOURCE_DIR}/lowmem/lowmem.c
   ${CMAKE_CURRENT_SOURCE_DIR}/lowmem/tlsf.c)

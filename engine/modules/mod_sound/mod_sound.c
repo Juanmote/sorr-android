@@ -31,6 +31,7 @@
 #endif
 
 #include "sorrnet.h"
+#include "sorrvib.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -538,6 +539,7 @@ static int load_wav( const char * filename )
     // Don't need free rwops, SDL will do
     if ( !( music = Mix_LoadWAV_RW( rwops, 1 ) ) ) return ( 0 );
 
+    sorrvib_loaded( music, filename );   /* vibracion segun el sonido (libnet/sorrvib.c) */
     return (( int )music );
 }
 
@@ -561,7 +563,11 @@ static int load_wav( const char * filename )
 
 static int play_wav( int id, int loops, int channel )
 {
-    if ( audio_initialized && id ) return ( ( int ) Mix_PlayChannel( channel, ( Mix_Chunk * )id, loops ) );
+    if ( audio_initialized && id )
+    {
+        sorrvib_played( ( Mix_Chunk * )id );
+        return ( ( int ) Mix_PlayChannel( channel, ( Mix_Chunk * )id, loops ) );
+    }
     return ( -1 );
 }
 
@@ -583,7 +589,7 @@ static int play_wav( int id, int loops, int channel )
 
 static int unload_wav( int id )
 {
-    if ( audio_initialized && id ) Mix_FreeChunk(( Mix_Chunk * )id );
+    if ( audio_initialized && id ) { sorrvib_unloaded( ( Mix_Chunk * )id ); Mix_FreeChunk(( Mix_Chunk * )id ); }
     return ( 0 );
 }
 

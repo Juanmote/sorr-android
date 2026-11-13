@@ -32,6 +32,9 @@
 #define __LIB_RENDER
 #include "librender.h"
 #include "sorrnet.h"
+#if defined(TARGET_ANDROID)
+#include "sorrvideo.h"
+#endif
 
 /* --------------------------------------------------------------------------- */
 
@@ -178,42 +181,15 @@ void gr_unlock_screen()
     if ( SDL_MUSTLOCK( screen ) ) SDL_UnlockSurface( screen ) ;
     if ( waitvsync ) gr_wait_vsync();
     sorrnet_frame( screen->pixels, screen->w, screen->h, screen->pitch, screen->format->BitsPerPixel );
+#if defined(TARGET_ANDROID)
+    /* Proporcion, filtro y colores elegidos en el lanzador (modules/libnet/sorrvideo.c) */
+    sorrvideo_upload( texture, screen->pixels, screen->pitch, screen->w, screen->h, screen->format->BitsPerPixel );
+    SDL_SetRenderDrawColor( renderer, 0, 0, 0, 255 );
+    SDL_RenderClear( renderer );
+    sorrvideo_draw( renderer, texture, screen->w, screen->h );
+#else
     SDL_UpdateTexture(texture, NULL, screen->pixels, screen->pitch);
     SDL_RenderClear(renderer);
-#if defined(TARGET_ANDROID)
-    {
-        /* Aspect handling chosen in the launcher (SORR_ASPECT):
-           fit = keep aspect with bars, stretch = fill deforming,
-           crop = keep aspect and fill (edges cut), mix = half crop / half stretch */
-        static int mode = -1;
-        int ow = 0, oh = 0;
-        if ( mode < 0 )
-        {
-            const char * a = getenv( "SORR_ASPECT" );
-            mode = 0;
-            if ( a && !strcmp( a, "stretch" ) ) mode = 1;
-            else if ( a && !strcmp( a, "crop" ) ) mode = 2;
-            else if ( a && !strcmp( a, "mix" ) ) mode = 3;
-        }
-        SDL_GetRendererOutputSize( renderer, &ow, &oh );
-        if ( mode == 1 || ow <= 0 || oh <= 0 || screen->w <= 0 || screen->h <= 0 )
-            SDL_RenderCopy( renderer, texture, NULL, NULL );
-        else
-        {
-            float fx = ( float ) ow / screen->w, fy = ( float ) oh / screen->h;
-            float fit = fx < fy ? fx : fy, fill = fx > fy ? fx : fy;
-            float sx = fit, sy = fit;
-            SDL_Rect dst;
-            if ( mode == 2 ) { sx = fill; sy = fill; }
-            else if ( mode == 3 ) { sx = ( fx + fill ) / 2; sy = ( fy + fill ) / 2; }
-            dst.w = ( int )( screen->w * sx + 0.5f );
-            dst.h = ( int )( screen->h * sy + 0.5f );
-            dst.x = ( ow - dst.w ) / 2;
-            dst.y = ( oh - dst.h ) / 2;
-            SDL_RenderCopy( renderer, texture, NULL, &dst );
-        }
-    }
-#else
     SDL_RenderCopy(renderer, texture, NULL, NULL);
 #endif
     SDL_RenderPresent(renderer);

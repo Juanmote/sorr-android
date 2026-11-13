@@ -46,7 +46,6 @@ public class TouchOverlay extends View {
     private final KeySink sink;
     private final Paint img = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final Paint imgOn = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-    private final Paint hi = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint textStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final float scale;
@@ -82,7 +81,6 @@ public class TouchOverlay extends View {
         img.setAlpha(a);
         imgOn.setAlpha(255);
         imgOn.setColorFilter(new LightingColorFilter(0xFFFFFF, 0x383838));
-        hi.setColor(Color.argb(110, 255, 255, 255));
         text.setTextAlign(Paint.Align.CENTER);
         text.setFakeBoldText(true);
         text.setColor(Color.argb(a, 255, 255, 255));
@@ -142,14 +140,12 @@ public class TouchOverlay extends View {
 
     @Override
     protected void onDraw(Canvas c) {
-        boolean anyDir = held.contains(Keys.UP) || held.contains(Keys.DOWN)
-                || held.contains(Keys.LEFT) || held.contains(Keys.RIGHT);
-        c.drawBitmap(padBmp, null, padRect, anyDir ? imgOn : img);
-        float arm = padR * 0.30f;
-        if (held.contains(Keys.UP)) armHi(c, padCx, padCy - padR * 0.62f, arm);
-        if (held.contains(Keys.DOWN)) armHi(c, padCx, padCy + padR * 0.62f, arm);
-        if (held.contains(Keys.LEFT)) armHi(c, padCx - padR * 0.62f, padCy, arm);
-        if (held.contains(Keys.RIGHT)) armHi(c, padCx + padR * 0.62f, padCy, arm);
+        // The d-pad stays translucent like the buttons; only the arm being pressed lights up
+        c.drawBitmap(padBmp, null, padRect, img);
+        if (held.contains(Keys.UP)) arm(c, 0.31f, 0f, 0.69f, 0.40f);
+        if (held.contains(Keys.DOWN)) arm(c, 0.31f, 0.60f, 0.69f, 1f);
+        if (held.contains(Keys.LEFT)) arm(c, 0f, 0.31f, 0.40f, 0.69f);
+        if (held.contains(Keys.RIGHT)) arm(c, 0.60f, 0.31f, 1f, 0.69f);
 
         for (Btn b : all) {
             boolean on = held.contains(b.key);
@@ -169,8 +165,13 @@ public class TouchOverlay extends View {
         }
     }
 
-    private void armHi(Canvas c, float x, float y, float r) {
-        c.drawRoundRect(new RectF(x - r, y - r, x + r, y + r), r * 0.35f, r * 0.35f, hi);
+    /** Draws one arm of the d-pad lit (the part of the artwork inside the given fractions of its box). */
+    private void arm(Canvas c, float l, float t, float r, float b) {
+        float w = padRect.width(), h = padRect.height();
+        c.save();
+        c.clipRect(padRect.left + l * w, padRect.top + t * h, padRect.left + r * w, padRect.top + b * h);
+        c.drawBitmap(padBmp, null, padRect, imgOn);
+        c.restore();
     }
 
     @Override

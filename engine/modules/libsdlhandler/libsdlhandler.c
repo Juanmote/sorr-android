@@ -44,8 +44,17 @@ static void  dump_new_events()
 //    SDL_FlushEvents(SDL_DOLLARGESTURE, SDL_LASTEVENT);
 
     /* Get new events */
+#if defined(TARGET_ANDROID)
+    /* Android: pumping is what lets SDL pause the game (and its sound) when the app goes to the
+       background or the screen is locked. SDL only blocks once the app has taken the
+       "entered background" event, and no module reads the app/window events, so drop them here. */
+    SDL_PumpEvents();
+    SDL_FlushEvents( SDL_APP_TERMINATING, SDL_APP_DIDENTERFOREGROUND );
+    SDL_FlushEvents( SDL_DISPLAYEVENT, SDL_SYSWMEVENT );
+#else
 //    SDL_PumpEvents();
     SDL_JoystickUpdate();
+#endif
 }
 
 /* ----------------------------------------------------------------- */

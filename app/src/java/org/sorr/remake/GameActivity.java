@@ -72,9 +72,12 @@ public class GameActivity extends SDLActivity implements TouchOverlay.KeySink {
         try {
             android.system.Os.setenv("SORR_ASPECT", LauncherActivity.aspectMode(p), true);
             android.system.Os.setenv("SDL_JOYSTICK_HIDAPI", "0", true);
-            android.system.Os.setenv("SORR_SMOOTH", p.getBoolean(LauncherActivity.KEY_SMOOTH, false) ? "1" : "0", true);
+            android.system.Os.setenv("SORR_FILTER", LauncherActivity.filterMode(p), true);
+            android.system.Os.setenv("SORR_COLORS", p.getString(LauncherActivity.KEY_COLORS, "original"), true);
+            android.system.Os.setenv("SORR_VIB", String.valueOf(p.getInt(LauncherActivity.KEY_VIB, 50)), true);
         } catch (Exception ignored) {}
         super.onCreate(savedInstanceState);
+        try { sysVib = (android.os.Vibrator) getSystemService(VIBRATOR_SERVICE); } catch (Exception ignored) {}
         goImmersive();
         touchMode = p.getString(LauncherActivity.KEY_TOUCH, "auto");
         padAsKeyboard = p.getBoolean(LauncherActivity.KEY_PAD_KEYBOARD, true);
@@ -151,6 +154,35 @@ public class GameActivity extends SDLActivity implements TouchOverlay.KeySink {
         if (isFinishing()) android.os.Process.killProcess(android.os.Process.myPid());
     }
 
+    // ---- vibration (called from the engine, engine/modules/libnet/sorrvib.c) ----
+    private static volatile android.os.Vibrator padVib;   // motor of the gamepad in use, if it has one
+    private static android.os.Vibrator sysVib;             // the console's own motor
+
+    /** strength 1-100, already scaled by the launcher's intensity. */
+    public static void rumble(int strength, int ms) {
+        android.os.Vibrator v = padVib != null ? padVib : sysVib;
+        if (v == null || strength <= 0 || ms <= 0) return;
+        try {
+            if (v.hasAmplitudeControl()) {
+                int amp = Math.max(1, Math.min(255, strength * 255 / 100));
+                v.vibrate(android.os.VibrationEffect.createOneShot(ms, amp));
+            } else {
+                // without amplitude control, a weaker setting means a shorter pulse
+                v.vibrate(android.os.VibrationEffect.createOneShot(Math.max(12, ms * strength / 100),
+                        android.os.VibrationEffect.DEFAULT_AMPLITUDE));
+            }
+        } catch (Exception ignored) {}
+    }
+
+    private static int padVibDevice = -1;
+    private static void notePad(InputDevice d) {
+        if (d == null || d.getId() == padVibDevice) return;
+        padVibDevice = d.getId();
+        android.os.Vibrator v = null;
+        try { v = d.getVibrator(); } catch (Exception ignored) {}
+        padVib = (v != null && v.hasVibrator()) ? v : null;
+    }
+
     // ---- TouchOverlay.KeySink ----
     @Override public void keyDown(int keyCode) { SDLActivity.onNativeKeyDown(keyCode); }
     @Override public void keyUp(int keyCode) { SDLActivity.onNativeKeyUp(keyCode); }
@@ -198,6 +230,7 @@ public class GameActivity extends SDLActivity implements TouchOverlay.KeySink {
         }
         if (isGamepad(event.getSource()) || KeyEvent.isGamepadButton(code)) {
             hideOverlay();
+            notePad(event.getDevice());
             if (padAsKeyboard) {
                 int k = Keys.direction(code);
                 if (k == -1) {
@@ -226,6 +259,7 @@ public class GameActivity extends SDLActivity implements TouchOverlay.KeySink {
     public boolean dispatchGenericMotionEvent(MotionEvent ev) {
         if (isGamepad(ev.getSource()) && ev.getAction() == MotionEvent.ACTION_MOVE) {
             hideOverlay();
+            notePad(ev.getDevice());
             if (padAsKeyboard) {
                 float x = ev.getAxisValue(MotionEvent.AXIS_HAT_X);
                 float y = ev.getAxisValue(MotionEvent.AXIS_HAT_Y);

@@ -143,6 +143,54 @@ public class Profiles {
         return null;
     }
 
+    public static final String OLD_NAME = "Partida anterior";
+
+    /**
+     * A save that was already in savegame/ before the APK managed profiles (the PC folder, PortMaster...)
+     * used to become "Principal", so "Principal" showed up with everything unlocked. Once per game folder:
+     * if "Principal" holds a mostly unlocked save, it is kept as its own profile ("Partida anterior") and
+     * "Principal" starts from zero. Returns the name of the new profile, or null if nothing was moved.
+     */
+    public String migrateOldSave() {
+        String k = "migrated_v9:" + gameDir.getAbsolutePath();
+        if (prefs.getBoolean(k, false)) return null;
+        String moved = null;
+        boolean principalActive = DEFAULT_NAME.equals(activeName());
+        File src = principalActive ? activeDir() : stored(DEFAULT_NAME);
+        File save = new File(src, SAVE_FILE);
+        if (save.isFile() && isMostlyUnlocked(save)) {
+            String name = OLD_NAME;
+            for (int i = 2; exists(name) && i < 100; i++) name = OLD_NAME + " " + i;
+            File dst = stored(name);
+            if ((dst.isDirectory() || dst.mkdirs()) && copyDir(src, dst) == null) {
+                File[] old = src.listFiles();
+                if (old != null) for (File f : old) deleteRec(f);
+                copyAsset(ASSET_BASE, new File(src, SAVE_FILE));
+                moved = name;
+            }
+        }
+        prefs.edit().putBoolean(k, true).commit();
+        return moved;
+    }
+
+    /** SorR save: 32-bit ints; offsets 8..252 are unlocked characters, stages, extras and the shop's cheats. */
+    static boolean isMostlyUnlocked(File f) {
+        byte[] b = new byte[256];
+        try (InputStream in = new FileInputStream(f)) {
+            int n = 0, r;
+            while (n < b.length && (r = in.read(b, n, b.length - n)) > 0) n += r;
+            if (n < b.length) return false;
+        } catch (Exception e) {
+            return false;
+        }
+        int set = 0;
+        for (int o = 8; o <= 252; o += 4) {
+            int v = (b[o] & 255) | (b[o + 1] & 255) << 8 | (b[o + 2] & 255) << 16 | (b[o + 3] & 255) << 24;
+            if (v != 0) set++;
+        }
+        return set >= 30;   // the unlocked save has ~55 of these set; a new game none
+    }
+
     /** Profiles that can never be deleted. */
     public static boolean isProtected(String name) {
         return UNLOCKED_NAME.equalsIgnoreCase(name);

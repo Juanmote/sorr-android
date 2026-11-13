@@ -3,6 +3,7 @@
    Las teclas son las del jugador 1 de la consola (el lanzador convierte el mando y los botones tactiles en ellas):
    flechas, X especial, C ataque, V salto, A policia, B combo especial, S combo final, D golpear atras, Enter START.
    MENU (Esc) dos veces seguidas sale de la partida. */
+#include "sorrvideo.h"
 #include <SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -60,23 +61,10 @@ static unsigned test_buttons(int frame)
 
 static void present(SDL_Renderer *r, SDL_Texture *t, int w, int h, int mode)
 {
-    int ow = 0, oh = 0;
+    (void)mode;   /* proporcion, filtro y colores: sorrvideo.c, igual que en el anfitrion */
     SDL_SetRenderDrawColor(r, 0, 0, 0, 255);
     SDL_RenderClear(r);
-    if (t && w > 0 && h > 0) {
-        SDL_GetRendererOutputSize(r, &ow, &oh);
-        if (mode == 1 || ow <= 0 || oh <= 0) SDL_RenderCopy(r, t, NULL, NULL);
-        else {
-            float fx = (float)ow / w, fy = (float)oh / h;
-            float fit = fx < fy ? fx : fy, fill = fx > fy ? fx : fy, sx = fit, sy = fit;
-            SDL_Rect d;
-            if (mode == 2) { sx = fill; sy = fill; }
-            else if (mode == 3) { sx = (fx + fill) / 2; sy = (fy + fill) / 2; }
-            d.w = (int)(w * sx + 0.5f); d.h = (int)(h * sy + 0.5f);
-            d.x = (ow - d.w) / 2; d.y = (oh - d.h) / 2;
-            SDL_RenderCopy(r, t, NULL, &d);
-        }
-    }
+    if (t && w > 0 && h > 0) sorrvideo_draw(r, t, w, h);
     SDL_RenderPresent(r);
 }
 
@@ -182,7 +170,7 @@ int sorrnet_guest_main(void)
                 tex = SDL_CreateTexture(ren, SDL_PIXELFORMAT_RGB565, SDL_TEXTUREACCESS_STREAMING, w, h);
                 tw = w; th = h;
             }
-            if (tex) SDL_UpdateTexture(tex, NULL, frame, w * 2);
+            if (tex) sorrvideo_upload(tex, frame, w * 2, w, h, 16);
             if (!frames++) sorrnet_set_status("", 0);
             {   /* pruebas: SORR_SHOT=prefijo, SORR_SHOTS=n1,n2 (numero de imagen recibida) */
                 const char *sp = getenv("SORR_SHOT"), *ss = getenv("SORR_SHOTS");

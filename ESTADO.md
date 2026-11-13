@@ -1,6 +1,6 @@
 # Estado del proyecto: port Android de Streets of Rage Remake
 
-Última actualización: 12 de noviembre de 2026 (versión 8 de la APK).
+Última actualización: 13 de noviembre de 2026 (versión 9 de la APK).
 
 ## Qué es
 
@@ -55,6 +55,7 @@ consola; la parte técnica la hace Claude.
 - El juego arranca y se juega bien en la Odin 3 (versión 4).
 - Con mando no queda ningún botón táctil en pantalla.
 - Perfil "Unlocked" con todo desbloqueado.
+- Juego en red (v8): funciona perfecto, tema cerrado.
 
 ## Entregado, pendiente de que el usuario lo pruebe (versión 5)
 
@@ -129,9 +130,43 @@ consola; la parte técnica la hace Claude.
   Compilar para Linux: `cmake -S engine -B build-linux` (paquetes libsdl2-dev, libsdl2-mixer-dev, libpng-dev) y
   copiar el binario como `bgdi` (no enlace simbólico) junto a `SorR.dat`.
 
+## Entregado en la versión 9 (13-11-2026), pendiente de probar
+
+- **Entorno nuevo otra vez**: la clave de la v8 se perdió; la v9 se firma con otra (`sorr-release.jks`, se le manda al
+  usuario para que la guarde: si la vuelve a subir en otra sesión, se copia a la raíz del repo antes de compilar).
+- **Perfil "Principal" con todo desbloqueado**: la carpeta del usuario traía ya una partida desbloqueada en `savegame/`
+  y se tomaba como "Principal". `Profiles.migrateOldSave()` (una vez por carpeta, preferencia `migrated_v9:<carpeta>`):
+  si la partida de "Principal" tiene 30 o más enteros distintos de 0 entre los bytes 8 y 252 (la desbloqueada tiene ~55,
+  una nueva casi ninguno), se guarda como perfil "Partida anterior" y "Principal" empieza con `savegame-base.sor`.
+  Se avisa con un diálogo. `savegame/` sigue siendo siempre el perfil activo; las copias, en `sorr_profiles/<nombre>/`.
+- **El juego seguía sonando al minimizar o bloquear**: nadie llamaba a `SDL_PumpEvents` y nadie retiraba de la cola los
+  eventos `SDL_APP_*` (el manejador de libwm empieza con `return;`), así que SDL nunca llegaba a pausar. Ahora
+  `libsdlhandler.c` (cada fotograma, solo Android) hace `SDL_PumpEvents()` y vacía los eventos de app/ventana/pantalla:
+  SDL bloquea el hilo del juego en segundo plano y pausa el audio (`Android_PumpEvents_Blocking`).
+- **Filtros y colores** como Outfoxies / Master of Darkness, en `engine/modules/libnet/sorrvideo.c` (lo usan
+  `g_screen.c` y el invitado `guest.c`): `SORR_FILTER` = sharp | sharpsmooth | smooth | scan | crt | crtcurve,
+  `SORR_COLORS` = original | tv | vivid | night | sepia | green (tabla RGB565 de 65536 entradas). `SORR_ASPECT` igual
+  que antes. La preferencia antigua `video_smooth` se traduce a "smooth". Probado en escritorio con SDL por software.
+- **Vibración** (`sorrvib.c`): no se puede leer la energía como en Outfoxies, así que va por los sonidos: `load_wav`
+  guarda el nombre del archivo y `play_wav` decide: policía/cohetes (90 %, 420 ms), explosiones (80, 260), caídas,
+  lanzamientos y muertes (68, 160), golpes (50, 85), salto (22, 45), escalado por la intensidad del lanzador
+  (`vibration`, 0-100, por defecto 50 → `SORR_VIB`). Una suave no corta a una fuerte. Java: `GameActivity.rumble`
+  (motor del mando si lo tiene, si no el de la consola). **Los nombres son una suposición**: el juego escribe
+  `sorr_sonidos.txt` en su carpeta (sonidos, veces y vibración asignada) para afinar la lista. Solo en el anfitrión.
+- **Lanzador**: tema con los colores del logo (fuego rojo-naranja-amarillo sobre casi negro y el azul de "OF RAGE"),
+  fuentes Bangers (títulos, botones principales) y Barlow Condensed (texto), ambas OFL en `assets/fonts`. El foco del
+  mando se conserva al rehacer la pantalla (antes se perdía y Android pintaba su "resaltado por defecto" blanco por
+  encima de todo); cada botón tiene su estado enfocado (marco amarillo). Deslizadores guardan al moverlos con la cruceta.
+  Proporción, Filtro y Colores son botones que cambian al pulsar (izquierda/derecha con el mando) con su explicación.
+  Tarjeta "Sonido y vibración": intensidad y "Música del menú" SÍ/NO (`menu_music`).
+- **Música del lanzador**: tema propio, rock de los 80 en chiptune (Mi menor, 152 BPM, 32 compases, 50 s en bucle),
+  sintetizado con `tools/compose_menu_theme.py` → `res/raw/menu_theme.ogg` (ffmpeg libvorbis q4). MediaPlayer en bucle,
+  se pausa al salir del lanzador.
+- **Cruceta táctil**: queda translúcida como los botones; solo se ilumina el brazo pulsado (recorte del dibujo).
+
 ## Pendiente
 
-1. Probar el juego en red en dos consolas (wifi y por internet con bore.pub).
+1. Que el usuario pruebe la v9 y mande `sorr_sonidos.txt` (o `SorR.dat`) para afinar qué sonidos vibran.
 2. El usuario irá apuntando más mejoras según juegue.
 ## Notas
 
