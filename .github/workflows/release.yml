@@ -1,0 +1,149 @@
+name: Compilar y publicar APK
+
+# Cada push a main compila la APK firmada con la clave del port y la publica en Releases.
+# La clave va en los secretos del repositorio (Settings > Secrets and variables > Actions):
+#   SORR_KEYSTORE_B64   el archivo sorr-release.jks en base64 (base64 -w0 sorr-release.jks)
+#   SORR_KEYSTORE_PASS  su contrasena (si no se pone: "sorrport", la de la clave que se genero en el chat)
+#   SORR_KEY_ALIAS      opcional (si no se pone, la primera que tenga el almacen)
+# Tambien se aceptan otros nombres habituales (KEYSTORE_B64, KEYSTORE_BASE64, SIGNING_KEY...). Sin clave no se
+# publica nada: una APK firmada con otra clave obligaria a desinstalar.
+
+on:
+  push:
+    branches: [ main ]
+    paths-ignore: [ '**.md', 'tools/**', 'tests/**' ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  SDL_TAG: release-2.30.9
+  MIXER_TAG: release-2.8.0
+  PNG_TAG: v1.6.44
+  NDK_VER: 27.2.12479018
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Preparar la clave de firma
+        env:
+          K1: ${{ secrets.SORR_KEYSTORE_B64 }}
+          K2: ${{ secrets.SORR_KEYSTORE }}
+          K3: ${{ secrets.KEYSTORE_B64 }}
+          K4: ${{ secrets.KEYSTORE_BASE64 }}
+          K5: ${{ secrets.KEYSTORE }}
+          K6: ${{ secrets.SIGNING_KEY }}
+          K7: ${{ secrets.SIGNING_KEY_B64 }}
+          K8: ${{ secrets.RELEASE_KEYSTORE }}
+          K9: ${{ secrets.SORR_RELEASE_JKS }}
+          K10: ${{ secrets.JKS }}
+          P1: ${{ secrets.SORR_KEYSTORE_PASS }}
+          P2: ${{ secrets.SORR_KEYSTORE_PASSWORD }}
+          P3: ${{ secrets.KEYSTORE_PASS }}
+          P4: ${{ secrets.KEYSTORE_PASSWORD }}
+          P5: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          P6: ${{ secrets.STORE_PASSWORD }}
+          A1: ${{ secrets.SORR_KEY_ALIAS }}
+          A2: ${{ secrets.KEY_ALIAS }}
+          A3: ${{ secrets.SIGNING_KEY_ALIAS }}
+          KP1: ${{ secrets.SORR_KEY_PASS }}
+          KP2: ${{ secrets.KEY_PASSWORD }}
+          KP3: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: |
+          set -e
+          key=""
+          for v in K1 K2 K3 K4 K5 K6 K7 K8 K9 K10; do [ -n "${!v}" ] && { key="${!v}"; echo "Clave en el secreto n.º ${v#K}"; break; }; done
+          if [ -z "$key" ]; then
+            echo "::error::No hay clave de firma. Crea el secreto SORR_KEYSTORE_B64 con 'base64 -w0 sorr-release.jks'."
+            exit 1
+          fi
+          ks="$RUNNER_TEMP/sorr-release.jks"
+          # en base64 (lo normal) o, si se pego tal cual en texto, PEM/otro: se intenta base64 primero
+          if ! printf '%s' "$key" | tr -d ' \r\n' | base64 -d > "$ks" 2>/dev/null || [ ! -s "$ks" ]; then
+            echo "::error::El secreto de la clave no es base64 valido."
+            exit 1
+          fi
+          pass=""
+          for v in P1 P2 P3 P4 P5 P6; do [ -n "${!v}" ] && { pass="${!v}"; break; }; done
+          [ -n "$pass" ] || pass=sorrport
+          alias=""
+          for v in A1 A2 A3; do [ -n "${!v}" ] && { alias="${!v}"; break; }; done
+          if [ -z "$alias" ]; then
+            alias=$(keytool -list -v -keystore "$ks" -storepass "$pass" 2>/dev/null | sed -n 's/^Alias name: //p' | head -1)
+          fi
+          if [ -z "$alias" ]; then
+            echo "::error::No se puede abrir el almacen de claves: revisa la contrasena (secreto SORR_KEYSTORE_PASS)."
+            exit 1
+          fi
+          kpass=""
+          for v in KP1 KP2 KP3; do [ -n "${!v}" ] && { kpass="${!v}"; break; }; done
+          [ -n "$kpass" ] || kpass="$pass"
+          echo "Alias: $alias"
+          keytool -list -v -keystore "$ks" -storepass "$pass" -alias "$alias" | grep -E "SHA256:" | head -1
+          {
+            echo "SORR_KEYSTORE=$ks"
+            echo "SORR_KEY_ALIAS=$alias"
+          } >> "$GITHUB_ENV"
+          echo "::add-mask::$pass"
+          echo "::add-mask::$kpass"
+          echo "SORR_KEYSTORE_PASS=$pass" >> "$GITHUB_ENV"
+          echo "SORR_KEY_PASS=$kpass" >> "$GITHUB_ENV"
+
+      - name: Instalar SDK y NDK de Android
+        run: |
+          set -e
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKM" --sdk_root="$ANDROID_HOME" "build-tools;35.0.0" "platforms;android-34" "ndk;$NDK_VER" > /dev/null
+          echo "ANDROID_SDK=$ANDROID_HOME" >> "$GITHUB_ENV"
+
+      - name: Descargar SDL2, SDL_mixer y libpng
+        run: |
+          set -e
+          mkdir -p src
+          ln -sfn ../engine src/engine
+          git clone -q --depth 1 -b "$SDL_TAG" https://github.com/libsdl-org/SDL src/SDL2
+          git clone -q --depth 1 -b "$MIXER_TAG" https://github.com/libsdl-org/SDL_mixer src/SDL2_mixer
+          git clone -q --depth 1 -b "$PNG_TAG" https://github.com/pnggroup/libpng src/libpng
+
+      - name: Compilar la APK
+        run: |
+          set -e
+          vname=$(sed -n 's/.*android:versionName="\([^"]*\)".*/\1/p' app/AndroidManifest.xml)
+          echo "VNAME=$vname" >> "$GITHUB_ENV"
+          # versionCode siempre creciente para que cada APK se instale encima de la anterior
+          SORR_REQUIRE_KEY=1 SORR_VERSION_CODE=$((1000 + ${{ github.run_number }})) \
+            SORR_VERSION_NAME="$vname.${{ github.run_number }}" ROOT="$GITHUB_WORKSPACE" bash build_apk.sh
+          mkdir -p salida
+          cp out/SorR-Android.apk "salida/SorR-Android-v$vname.${{ github.run_number }}.apk"
+          "$ANDROID_SDK/build-tools/35.0.0/apksigner" verify --print-certs out/SorR-Android.apk | grep -i "SHA-256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SorR-Android
+          path: salida/*.apk
+
+      - name: Publicar release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          set -e
+          tag="v$VNAME.${{ github.run_number }}"
+          {
+            echo "Compilación automática del commit ${GITHUB_SHA::7}. / Automatic build of commit ${GITHUB_SHA::7}."
+            echo
+            printf '%s\n' "${COMMIT_MSG:-Compilación manual}" | grep -v "^Co-Authored-By\|^Claude-Session"
+            echo
+            echo "Necesitas el juego de PC (Streets of Rage Remake 5.2): la carpeta con SorR.dat, mod/ y palettes/."
+            echo "You need the PC game (Streets of Rage Remake 5.2): the folder with SorR.dat, mod/ and palettes/."
+          } > notas.md
+          gh release create "$tag" salida/*.apk --title "Streets of Rage Remake Android $tag" --notes-file notas.md --latest

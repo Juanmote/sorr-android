@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 project(sorr_android C CXX)
 
-set(SRC /home/claude/sorr/src)
+set(SRC ${CMAKE_CURRENT_SOURCE_DIR}/../src)
 
 # ---- SDL2 (shared: libSDL2.so, loaded by SDLActivity) ----
 set(SDL_SHARED ON CACHE BOOL "" FORCE)

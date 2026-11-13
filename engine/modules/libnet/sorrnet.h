@@ -16,5 +16,6 @@ int sorrnet_key(int code);
 
 /* una linea para mostrar encima del juego ("" = nada) */
 const char *sorrnet_status(void);
+int sorrnet_en(void);   /* 1 = avisos en ingles (SORR_LANG no es "es") */
 void sorrnet_set_status(const char *s, int ms);   /* mensaje durante ms milisegundos (0 = hasta que se cambie) */
 #endif

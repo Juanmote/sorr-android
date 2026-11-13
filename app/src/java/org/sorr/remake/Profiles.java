@@ -71,18 +71,18 @@ public class Profiles {
     /** First free name like "Perfil 2", "Perfil 3"... */
     public String suggestName() {
         for (int i = 2; i < 100; i++) {
-            String n = "Perfil " + i;
+            String n = L.t("Perfil ", "Profile ") + i;
             if (!exists(n)) return n;
         }
-        return "Perfil";
+        return L.t("Perfil", "Profile");
     }
 
     /** Makes sure the active savegame folder exists; seeds a fresh one with the base save. */
     public String prepareActive() {
         File a = activeDir();
-        if (!a.isDirectory() && !a.mkdirs()) return "No se pudo crear la carpeta savegame";
+        if (!a.isDirectory() && !a.mkdirs()) return L.t("No se pudo crear la carpeta savegame", "Could not create the savegame folder");
         File save = new File(a, SAVE_FILE);
-        if (!save.exists() && !copyAsset(ASSET_BASE, save)) return "No se pudo crear la partida inicial";
+        if (!save.exists() && !copyAsset(ASSET_BASE, save)) return L.t("No se pudo crear la partida inicial", "Could not create the starting save");
         return null;
     }
 
@@ -90,41 +90,41 @@ public class Profiles {
         String current = activeName();
         if (target.equals(current)) return null;
         File targetDir = stored(target);
-        if (!targetDir.isDirectory()) return "No existe la carpeta del perfil \"" + target + "\"";
+        if (!targetDir.isDirectory()) return L.t("No existe la carpeta del perfil \"", "The profile folder does not exist: \"") + target + "\"";
 
         // 1) store the profile that is active now
         File a = activeDir();
         File keep = stored(current);
         if (a.isDirectory()) {
             if (!keep.isDirectory() && !keep.mkdirs())
-                return "No se pudo crear " + PROFILES_DIR + "/" + current;
+                return L.t("No se pudo crear ", "Could not create ") + PROFILES_DIR + "/" + current;
             String e = replaceContents(a, keep);
-            if (e != null) return "No se pudo guardar el perfil \"" + current + "\": " + e;
+            if (e != null) return L.t("No se pudo guardar el perfil \"", "Could not save the profile \"") + current + "\": " + e;
         }
 
         // 2) load the chosen one
-        if (!a.isDirectory() && !a.mkdirs()) return "No se pudo crear la carpeta savegame";
+        if (!a.isDirectory() && !a.mkdirs()) return L.t("No se pudo crear la carpeta savegame", "Could not create the savegame folder");
         String e = replaceContents(targetDir, a);
         if (e != null) {
             // try to leave things as they were
             if (keep.isDirectory()) replaceContents(keep, a);
-            return "No se pudo cargar el perfil \"" + target + "\": " + e;
+            return L.t("No se pudo cargar el perfil \"", "Could not load the profile \"") + target + "\": " + e;
         }
-        if (!prefs.edit().putString(key(), target).commit()) return "No se pudo guardar la selección";
+        if (!prefs.edit().putString(key(), target).commit()) return L.t("No se pudo guardar la selección", "Could not save the selection");
         return null;
     }
 
     /** Creates a profile seeded from an asset save and switches to it. */
     public String create(String rawName, String asset) {
         String name = clean(rawName);
-        if (name == null) return "Nombre no válido (usa letras, números, espacios o guiones)";
-        if (exists(name)) return "Ya existe un perfil llamado \"" + name + "\"";
+        if (name == null) return L.t("Nombre no válido (usa letras, números, espacios o guiones)", "Invalid name (use letters, numbers, spaces or hyphens)");
+        if (exists(name)) return L.t("Ya existe un perfil llamado \"", "There is already a profile called \"") + name + "\"";
         File dir = stored(name);
         if (!dir.isDirectory() && !dir.mkdirs())
-            return "No se pudo crear la carpeta " + PROFILES_DIR + "/" + name;
+            return L.t("No se pudo crear la carpeta ", "Could not create the folder ") + PROFILES_DIR + "/" + name;
         if (asset != null && !copyAsset(asset, new File(dir, SAVE_FILE))) {
             deleteRec(dir);
-            return "No se pudo escribir la partida del perfil";
+            return L.t("No se pudo escribir la partida del perfil", "Could not write the profile's save");
         }
         String e = switchTo(name);
         if (e != null) deleteRec(dir);
@@ -135,15 +135,15 @@ public class Profiles {
     public String ensureUnlocked() {
         if (exists(UNLOCKED_NAME)) return null;
         File dir = stored(UNLOCKED_NAME);
-        if (!dir.isDirectory() && !dir.mkdirs()) return "No se pudo crear " + PROFILES_DIR + "/" + UNLOCKED_NAME;
+        if (!dir.isDirectory() && !dir.mkdirs()) return L.t("No se pudo crear ", "Could not create ") + PROFILES_DIR + "/" + UNLOCKED_NAME;
         if (!copyAsset(ASSET_UNLOCK, new File(dir, SAVE_FILE))) {
             deleteRec(dir);
-            return "No se pudo escribir la partida del perfil";
+            return L.t("No se pudo escribir la partida del perfil", "Could not write the profile's save");
         }
         return null;
     }
 
-    public static final String OLD_NAME = "Partida anterior";
+    public static final String OLD_NAME = L.t("Partida anterior", "Previous save");
 
     /**
      * A save that was already in savegame/ before the APK managed profiles (the PC folder, PortMaster...)
@@ -197,10 +197,10 @@ public class Profiles {
     }
 
     public String delete(String name) {
-        if (name.equals(activeName())) return "No se puede borrar el perfil activo";
-        if (isProtected(name)) return "El perfil \"" + name + "\" no se puede borrar";
+        if (name.equals(activeName())) return L.t("No se puede borrar el perfil activo", "The active profile cannot be deleted");
+        if (isProtected(name)) return L.t("El perfil \"", "The profile \"") + name + L.t("\" no se puede borrar", "\" cannot be deleted");
         File dir = stored(name);
-        if (dir.exists() && !deleteRec(dir)) return "No se pudo borrar " + dir.getName();
+        if (dir.exists() && !deleteRec(dir)) return L.t("No se pudo borrar ", "Could not delete ") + dir.getName();
         return null;
     }
 
@@ -221,7 +221,7 @@ public class Profiles {
     /** Makes dst contain exactly the files of src (recursive). */
     private static String replaceContents(File src, File dst) {
         File[] old = dst.listFiles();
-        if (old != null) for (File f : old) if (!deleteRec(f)) return "no se pudo borrar " + f.getName();
+        if (old != null) for (File f : old) if (!deleteRec(f)) return L.t("no se pudo borrar ", "could not delete ") + f.getName();
         return copyDir(src, dst);
     }
 
@@ -231,7 +231,7 @@ public class Profiles {
         for (File k : kids) {
             File d = new File(dst, k.getName());
             if (k.isDirectory()) {
-                if (!d.isDirectory() && !d.mkdirs()) return "no se pudo crear " + d.getName();
+                if (!d.isDirectory() && !d.mkdirs()) return L.t("no se pudo crear ", "could not create ") + d.getName();
                 String e = copyDir(k, d);
                 if (e != null) return e;
             } else {
@@ -240,7 +240,7 @@ public class Profiles {
                     int n;
                     while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
                 } catch (Exception ex) {
-                    return "no se pudo copiar " + k.getName() + " (" + ex.getMessage() + ")";
+                    return L.t("no se pudo copiar ", "could not copy ") + k.getName() + " (" + ex.getMessage() + ")";
                 }
             }
         }

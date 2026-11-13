@@ -73,7 +73,7 @@ public class TouchOverlay extends View {
         fin = new Btn(Keys.Y, load(ctx, R.drawable.tc_final), false, null);
         Bitmap empty = load(ctx, R.drawable.tc_empty);
         start = new Btn(Keys.START, empty, false, "START");
-        menu = new Btn(Keys.BACK, empty, false, "MENÚ");
+        menu = new Btn(Keys.BACK, empty, false, L.t("MENÚ", "MENU"));
         all = new Btn[] { attack, jump, special, back, combo, police, fin, start, menu };
 
         // Opacity setting 15..90 % -> artwork 36..92 %; pressed buttons are opaque and lit

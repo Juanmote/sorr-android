@@ -111,7 +111,7 @@ int sorrnet_guest_main(void)
     if (!strncmp(e, "code:", 5)) {
         int relay = 0;
         if (!inet_code_target(e + 5, host, sizeof host, &port, &relay)) {
-            sorrnet_set_status("Ese código no es válido. Revísalo y vuelve a probar.", 0);
+            sorrnet_set_status(sorrnet_en() ? "That code is not valid. Check it and try again." : "Ese código no es válido. Revísalo y vuelve a probar.", 0);
             wait_ms(ren, 4000);
             return 0;
         }
@@ -123,20 +123,23 @@ int sorrnet_guest_main(void)
     }
     {
         char m[200];
-        snprintf(m, sizeof m, "Conectando con la partida (%s)...", host);
+        snprintf(m, sizeof m, sorrnet_en() ? "Connecting to the game (%s)..." : "Conectando con la partida (%s)...", host);
         sorrnet_set_status(m, 0);
     }
     present(ren, NULL, 0, 0, 0);
     r = net_join_addr(host, port);
     if (r <= 0) {
-        sorrnet_set_status(r < 0 ? "El anfitrión tiene otra versión del port: hay que tener la misma APK en las dos consolas."
-                                 : "No se ha podido entrar en la partida. Comprueba que sigue abierta (y el código, si es por internet).", 0);
+        sorrnet_set_status(sorrnet_en()
+            ? (r < 0 ? "The host has another version of the port: both consoles need the same APK."
+                     : "Could not join the game. Check that it is still open (and the code, if over the internet).")
+            : (r < 0 ? "El anfitrión tiene otra versión del port: hay que tener la misma APK en las dos consolas."
+                     : "No se ha podido entrar en la partida. Comprueba que sigue abierta (y el código, si es por internet)."), 0);
         fprintf(stderr, "guest: no se ha podido entrar en %s:%d\n", host, port);
         wait_ms(ren, 5000);
         return 0;
     }
     fprintf(stderr, "guest: dentro de %s:%d, sonido %d Hz\n", host, port, net_guest_rate());
-    sorrnet_set_status("Conectado. Esperando la imagen del anfitrión...", 0);
+    sorrnet_set_status(sorrnet_en() ? "Connected. Waiting for the host's picture..." : "Conectado. Esperando la imagen del anfitrión...", 0);
 
     {
         SDL_AudioSpec want, have;
@@ -156,8 +159,8 @@ int sorrnet_guest_main(void)
                 if (esc_armed && !SDL_TICKS_PASSED(SDL_GetTicks(), esc_at + 2500)) quit = 1;
                 else {
                     char m[160]; int p = net_guest_ping();
-                    if (p >= 0) snprintf(m, sizeof m, "Pulsa MENÚ otra vez para salir de la partida en red.  (retraso: %d ms)", p);
-                    else snprintf(m, sizeof m, "Pulsa MENÚ otra vez para salir de la partida en red.");
+                    if (p >= 0) snprintf(m, sizeof m, sorrnet_en() ? "Press MENU again to leave the network game.  (delay: %d ms)" : "Pulsa MENÚ otra vez para salir de la partida en red.  (retraso: %d ms)", p);
+                    else snprintf(m, sizeof m, "%s", sorrnet_en() ? "Press MENU again to leave the network game." : "Pulsa MENÚ otra vez para salir de la partida en red.");
                     sorrnet_set_status(m, 2500);
                     esc_armed = 1; esc_at = SDL_GetTicks();
                 }
@@ -194,7 +197,7 @@ int sorrnet_guest_main(void)
             }
         }
         if (!net_connected()) {
-            sorrnet_set_status("Se ha perdido la conexión con el anfitrión.", 0);
+            sorrnet_set_status(sorrnet_en() ? "The connection with the host was lost." : "Se ha perdido la conexión con el anfitrión.", 0);
             fprintf(stderr, "guest: conexion perdida\n");
             wait_ms(ren, 3000);
             break;

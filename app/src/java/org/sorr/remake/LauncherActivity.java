@@ -53,6 +53,7 @@ public class LauncherActivity extends Activity {
     public static final String KEY_COLORS = "video_colors";     // original | tv | vivid | night | sepia | green
     public static final String KEY_VIB = "vibration";           // 0-100 (0 = off)
     public static final String KEY_MUSIC = "menu_music";        // launcher theme on/off
+    public static final String EXIT_FLAG = "exit_all";          // written by GameActivity on a normal exit
 
     public static String filterMode(SharedPreferences p) {
         String f = p.getString(KEY_FILTER, null);
@@ -92,6 +93,8 @@ public class LauncherActivity extends Activity {
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        // Opened fresh (not brought back after the game): an old "close" order no longer applies
+        if (b == null) new java.io.File(getFilesDir(), EXIT_FLAG).delete();
         try { fontTitle = Typeface.createFromAsset(getAssets(), "fonts/Bangers-Regular.ttf"); } catch (Exception e) { fontTitle = Typeface.DEFAULT_BOLD; }
         try { fontBody = Typeface.createFromAsset(getAssets(), "fonts/BarlowCondensed-Medium.ttf"); } catch (Exception e) { fontBody = Typeface.DEFAULT; }
         android.widget.FrameLayout frame = new android.widget.FrameLayout(this);
@@ -181,6 +184,15 @@ public class LauncherActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        java.io.File exit = new java.io.File(getFilesDir(), EXIT_FLAG);
+        if (exit.exists()) {
+            // Leaving the game closes the launcher as well
+            exit.delete();
+            prefs.edit().remove("pending_log_dir").remove("pending_log_since").apply();
+            if (music != null) try { music.pause(); } catch (Exception ignored) {}
+            finishAndRemoveTask();
+            return;
+        }
         render();
         dumpLogcatIfPending();
         updateMusic();
@@ -263,7 +275,7 @@ public class LauncherActivity extends Activity {
         title.setLetterSpacing(0.04f);
         fire(title);
         root.addView(title);
-        TextView rem = text("REMAKE  ·  PORT ANDROID", 22, TEXT);
+        TextView rem = text(L.t("REMAKE  ·  PORT ANDROID", "REMAKE  ·  ANDROID PORT"), 22, TEXT);
         rem.setTypeface(fontTitle);
         rem.setLetterSpacing(0.06f);
         fire(rem);
@@ -287,24 +299,24 @@ public class LauncherActivity extends Activity {
 
         // ---- Storage permission
         if (!hasStorage()) {
-            LinearLayout c = card("Permiso de almacenamiento");
-            c.addView(text("Hace falta acceso a archivos para leer los datos del juego y guardar partidas.", 15, MUTED));
-            c.addView(button("Conceder permiso", true, v -> requestStorage()));
+            LinearLayout c = card(L.t("Permiso de almacenamiento", "Storage permission"));
+            c.addView(text(L.t("Hace falta acceso a archivos para leer los datos del juego y guardar partidas.", "File access is needed to read the game data and save your games."), 15, MUTED));
+            c.addView(button(L.t("Conceder permiso", "Grant permission"), true, v -> requestStorage()));
             return;
         }
 
         // ---- Game folder
         File dir = gameDir();
         File dat = findDat(dir);
-        LinearLayout folder = card("Carpeta del juego");
+        LinearLayout folder = card(L.t("Carpeta del juego", "Game folder"));
         folder.addView(text(dir.getAbsolutePath(), 15, TEXT));
         if (dat == null) {
-            folder.addView(text("No se encuentra SorR.dat en esta carpeta. Copia ahí el juego de PC "
-                    + "(SorR.dat, mod/, palettes/...) o elige otra carpeta.", 15, WARN));
+            folder.addView(text(L.t("No se encuentra SorR.dat en esta carpeta. Copia ahí el juego de PC ", "SorR.dat is not in this folder. Copy the PC game there ")
+                    + L.t("(SorR.dat, mod/, palettes/...) o elige otra carpeta.", "(SorR.dat, mod/, palettes/...) or choose another folder."), 15, WARN));
         } else {
-            folder.addView(text("Datos encontrados: " + dat.getName(), 15, OK));
+            folder.addView(text(L.t("Datos encontrados: ", "Game data found: ") + dat.getName(), 15, OK));
         }
-        folder.addView(button("Elegir carpeta", false, v -> pickFolder()));
+        folder.addView(button(L.t("Elegir carpeta", "Choose folder"), false, v -> pickFolder()));
 
         if (dat == null) {
             // Joining someone else's game does not need the game data
@@ -319,17 +331,17 @@ public class LauncherActivity extends Activity {
         final String moved = profiles.migrateOldSave();
         if (moved != null) {
             new AlertDialog.Builder(this)
-                    .setTitle("Perfiles")
-                    .setMessage("En la carpeta del juego ya había una partida con casi todo desbloqueado y se estaba usando "
-                            + "como perfil \"Principal\". Ahora está guardada como perfil \"" + moved + "\" y \"Principal\" "
-                            + "empieza desde cero. Para el juego con todo abierto está el perfil \"Unlocked\".")
-                    .setPositiveButton("Aceptar", null)
+                    .setTitle(L.t("Perfiles", "Profiles"))
+                    .setMessage(L.t("En la carpeta del juego ya había una partida con casi todo desbloqueado y se estaba usando ", "The game folder already had a save with nearly everything unlocked, and it was being used ")
+                            + L.t("como perfil \"Principal\". Ahora está guardada como perfil \"", "as the \"Principal\" profile. It is now kept as the profile \"") + moved + L.t("\" y \"Principal\" ", "\" and \"Principal\" ")
+                            + L.t("empieza desde cero. Para el juego con todo abierto está el perfil \"Unlocked\".", "starts from scratch. For the game with everything open, use the \"Unlocked\" profile."))
+                    .setPositiveButton(L.t("Aceptar", "OK"), null)
                     .show();
         }
 
         // ---- Play
         space(4);
-        Button play = button("JUGAR   ·   perfil: " + profiles.activeName(), true, v -> launch(dir, dat));
+        Button play = button(L.t("JUGAR   ·   perfil: ", "PLAY   ·   profile: ") + profiles.activeName(), true, v -> launch(dir, dat));
         play.setTextSize(TypedValue.COMPLEX_UNIT_SP, 26);
         play.setPadding(0, dp(14), 0, dp(14));
         root.addView(play, lpMatch());
@@ -339,10 +351,10 @@ public class LauncherActivity extends Activity {
         netCard(dir, dat);
 
         // ---- Profiles
-        LinearLayout pc = card("Perfiles de guardado");
-        pc.addView(text("Cada perfil tiene sus propias partidas, opciones y desbloqueables (se guardan en la carpeta "
-                + "sorr_profiles; savegame es siempre el perfil activo). \"Unlocked\" trae la tienda y todos los extras "
-                + "desbloqueados y no se puede borrar.", 14, MUTED));
+        LinearLayout pc = card(L.t("Perfiles de guardado", "Save profiles"));
+        pc.addView(text(L.t("Cada perfil tiene sus propias partidas, opciones y desbloqueables (se guardan en la carpeta ", "Each profile has its own saves, options and unlockables (they are kept in the folder ")
+                + L.t("sorr_profiles; savegame es siempre el perfil activo). \"Unlocked\" trae la tienda y todos los extras ", "sorr_profiles; savegame is always the active profile). \"Unlocked\" comes with the shop and all extras ")
+                + L.t("desbloqueados y no se puede borrar.", "unlocked and cannot be deleted."), 14, MUTED));
         List<String> list = profiles.list();
         String active = profiles.activeName();
         for (String name : list) {
@@ -356,7 +368,7 @@ public class LauncherActivity extends Activity {
             });
             row.addView(sel, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
             if (!isActive && !Profiles.isProtected(name)) {
-                Button del = button("Borrar", false, v -> confirmDelete(profiles, name));
+                Button del = button(L.t("Borrar", "Delete"), false, v -> confirmDelete(profiles, name));
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                         LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
                 lp.leftMargin = dp(8);
@@ -365,78 +377,78 @@ public class LauncherActivity extends Activity {
             }
             pc.addView(row, lpMatch());
         }
-        pc.addView(button("+ Nuevo perfil (partida desde cero)", false, v -> askNewProfile(profiles)), lpMatch());
+        pc.addView(button(L.t("+ Nuevo perfil (partida desde cero)", "+ New profile (start from scratch)"), false, v -> askNewProfile(profiles)), lpMatch());
 
         // ---- Controls
-        LinearLayout cc = card("Controles");
+        LinearLayout cc = card(L.t("Controles", "Controls"));
         boolean never = "never".equals(prefs.getString(KEY_TOUCH, "auto"));
-        cc.addView(button(never ? "Controles táctiles: DESACTIVADOS" : "Controles táctiles: AUTOMÁTICO", false, v -> {
+        cc.addView(button(never ? L.t("Controles táctiles: DESACTIVADOS", "Touch controls: OFF") : L.t("Controles táctiles: AUTOMÁTICO", "Touch controls: AUTOMATIC"), false, v -> {
             prefs.edit().putString(KEY_TOUCH, never ? "auto" : "never").apply();
             render();
         }), lpMatch());
-        cc.addView(text("Automático: al usar un mando físico desaparecen todos los botones táctiles. "
-                + "Si tocas la pantalla vuelven a aparecer.", 14, MUTED));
+        cc.addView(text(L.t("Automático: al usar un mando físico desaparecen todos los botones táctiles. ", "Automatic: when you use a gamepad, all touch buttons disappear. ")
+                + L.t("Si tocas la pantalla vuelven a aparecer.", "Touch the screen and they come back."), 14, MUTED));
         boolean kb = prefs.getBoolean(KEY_PAD_KEYBOARD, true);
-        cc.addView(button(kb ? "Mando físico: listo para jugar (recomendado)" : "Mando físico: joystick (configurar en el juego)", false, v -> {
+        cc.addView(button(kb ? L.t("Mando físico: listo para jugar (recomendado)", "Gamepad: ready to play (recommended)") : L.t("Mando físico: joystick (configurar en el juego)", "Gamepad: joystick (set it up in the game)"), false, v -> {
             prefs.edit().putBoolean(KEY_PAD_KEYBOARD, !kb).apply();
             render();
         }), lpMatch());
         cc.addView(text(kb
-                ? "El mando funciona directamente con la configuración de teclas del perfil. Para 2 jugadores con 2 mandos, cambia a modo joystick."
-                : "El juego verá los mandos como joysticks: configúralos en Options > Controls.", 14, MUTED));
+                ? L.t("El mando funciona directamente con la configuración de teclas del perfil. Para 2 jugadores con 2 mandos, cambia a modo joystick.", "The gamepad works straight away with the profile's key setup. For 2 players with 2 gamepads, switch to joystick mode.")
+                : L.t("El juego verá los mandos como joysticks: configúralos en Options > Controls.", "The game will see the gamepads as joysticks: set them up in Options > Controls."), 14, MUTED));
         if (kb) {
-            cc.addView(button("Configurar botones del mando", false, v -> { mapScreen = true; render(); }), lpMatch());
-            cc.addView(text("Elige qué botón del mando hace cada cosa. Sirve para cualquier mando, "
-                    + "también los de seis botones.", 14, MUTED));
+            cc.addView(button(L.t("Configurar botones del mando", "Set up gamepad buttons"), false, v -> { mapScreen = true; render(); }), lpMatch());
+            cc.addView(text(L.t("Elige qué botón del mando hace cada cosa. Sirve para cualquier mando, ", "Choose what each gamepad button does. Works with any gamepad, ")
+                    + L.t("también los de seis botones.", "six-button ones too."), 14, MUTED));
         }
-        cc.addView(slider("Opacidad de los botones", KEY_ALPHA, 50, 15, 90, false));
-        cc.addView(slider("Tamaño de los botones", KEY_SIZE, 100, 60, 140, false));
+        cc.addView(slider(L.t("Opacidad de los botones", "Button opacity"), KEY_ALPHA, 50, 15, 90, false));
+        cc.addView(slider(L.t("Tamaño de los botones", "Button size"), KEY_SIZE, 100, 60, 140, false));
 
         // ---- Video
-        LinearLayout vc = card("Imagen");
-        cycle(vc, "Proporción", KEY_ASPECT, aspectMode(prefs),
+        LinearLayout vc = card(L.t("Imagen", "Picture"));
+        cycle(vc, L.t("Proporción", "Aspect ratio"), KEY_ASPECT, aspectMode(prefs),
                 new String[] { "fit", "crop", "mix", "stretch" },
-                new String[] { "Original", "Recortar", "Mixta", "Estirada" },
-                new String[] { "Sin deformar, con bandas negras",
-                        "Sin deformar, llena la pantalla cortando los bordes. En pantallas casi cuadradas (8:7) prueba esta o Mixta",
-                        "Mitad recorte, mitad estirado",
-                        "Llena la pantalla deformando" });
-        cycle(vc, "Filtro", KEY_FILTER, filterMode(prefs),
+                new String[] { "Original", L.t("Recortar", "Crop"), L.t("Mixta", "Mixed"), L.t("Estirada", "Stretched") },
+                new String[] { L.t("Sin deformar, con bandas negras", "Undistorted, with black bars"),
+                        L.t("Sin deformar, llena la pantalla cortando los bordes. En pantallas casi cuadradas (8:7) prueba esta o Mixta", "Undistorted, fills the screen by cutting the edges. On nearly square screens (8:7) try this or Mixed"),
+                        L.t("Mitad recorte, mitad estirado", "Half crop, half stretch"),
+                        L.t("Llena la pantalla deformando", "Fills the screen, distorted") });
+        cycle(vc, L.t("Filtro", "Filter"), KEY_FILTER, filterMode(prefs),
                 new String[] { "sharp", "sharpsmooth", "smooth", "scan", "crt", "crtcurve" },
-                new String[] { "Nítida", "Nítida suavizada", "Suavizada", "Scanlines", "CRT", "CRT curvo" },
-                new String[] { "Píxeles tal cual, sin suavizar",
-                        "Píxeles nítidos con los bordes suavizados",
-                        "Algo borrosa, como cualquier pantalla moderna",
-                        "Líneas oscuras entre las del juego",
-                        "Tele de tubo: máscara de fósforo y resplandor",
-                        "Tele de tubo con la pantalla abombada" });
-        cycle(vc, "Colores", KEY_COLORS, prefs.getString(KEY_COLORS, "original"),
+                new String[] { L.t("Nítida", "Sharp"), L.t("Nítida suavizada", "Sharp smoothed"), L.t("Suavizada", "Smooth"), "Scanlines", "CRT", L.t("CRT curvo", "Curved CRT") },
+                new String[] { L.t("Píxeles tal cual, sin suavizar", "Pixels as they are, no smoothing"),
+                        L.t("Píxeles nítidos con los bordes suavizados", "Sharp pixels with smoothed edges"),
+                        L.t("Algo borrosa, como cualquier pantalla moderna", "A bit blurry, like any modern screen"),
+                        L.t("Líneas oscuras entre las del juego", "Dark lines between the game's lines"),
+                        L.t("Tele de tubo: máscara de fósforo y resplandor", "Tube TV: phosphor mask and glow"),
+                        L.t("Tele de tubo con la pantalla abombada", "Tube TV with a curved screen") });
+        cycle(vc, L.t("Colores", "Colours"), KEY_COLORS, prefs.getString(KEY_COLORS, "original"),
                 new String[] { "original", "tv", "vivid", "night", "sepia", "green" },
-                new String[] { "Original", "Tele antigua", "Vivos", "Nocturna", "Sepia", "Pantalla verde" },
-                new String[] { "Los colores del juego",
-                        "Negros algo levantados, menos contraste y un punto cálida",
-                        "Más contraste y saturación",
-                        "Sombras frías y luces cálidas",
-                        "Tonos de foto antigua",
-                        "Cuatro tonos de verde, como una portátil antigua" });
-        vc.addView(text("Toca para cambiar (con el mando, también izquierda y derecha). El modo panorámico del "
-                + "propio juego se elige en sus opciones.", 14, MUTED));
+                new String[] { "Original", L.t("Tele antigua", "Old TV"), L.t("Vivos", "Vivid"), L.t("Nocturna", "Night"), "Sepia", L.t("Pantalla verde", "Green screen") },
+                new String[] { L.t("Los colores del juego", "The game's own colours"),
+                        L.t("Negros algo levantados, menos contraste y un punto cálida", "Slightly raised blacks, less contrast and a little warm"),
+                        L.t("Más contraste y saturación", "More contrast and saturation"),
+                        L.t("Sombras frías y luces cálidas", "Cool shadows and warm highlights"),
+                        L.t("Tonos de foto antigua", "Old photo tones"),
+                        L.t("Cuatro tonos de verde, como una portátil antigua", "Four shades of green, like an old handheld") });
+        vc.addView(text(L.t("Toca para cambiar (con el mando, también izquierda y derecha). El modo panorámico del ", "Tap to change (with a gamepad, left and right too). The game's own widescreen ")
+                + L.t("propio juego se elige en sus opciones.", "mode is chosen in its options."), 14, MUTED));
 
         soundCard();
 
         space(8);
-        root.addView(text("Si algo falla, en la carpeta del juego se crean sorr_log.txt y sorr_logcat.txt con los detalles.", 13, MUTED));
-        root.addView(text("Motor: bennugd-monolithic (josebagar, isage). Partidas base: PortMaster. Música del lanzador "
-                + "original para este port. Fuentes: Bangers y Barlow (SIL OFL). "
-                + "Streets of Rage Remake © Bombergames. Juego freeware, sin afiliación con SEGA.", 12, MUTED));
+        root.addView(text(L.t("Si algo falla, en la carpeta del juego se crean sorr_log.txt y sorr_logcat.txt con los detalles.", "If something goes wrong, sorr_log.txt and sorr_logcat.txt are written to the game folder with the details."), 13, MUTED));
+        root.addView(text(L.t("Motor: bennugd-monolithic (josebagar, isage). Partidas base: PortMaster. Música del lanzador ", "Engine: bennugd-monolithic (josebagar, isage). Base saves: PortMaster. Launcher music ")
+                + L.t("original para este port. Fuentes: Bangers y Barlow (SIL OFL). ", "made for this port. Fonts: Bangers and Barlow (SIL OFL). ")
+                + L.t("Streets of Rage Remake © Bombergames. Juego freeware, sin afiliación con SEGA.", "Streets of Rage Remake © Bombergames. Freeware game, not affiliated with SEGA."), 12, MUTED));
     }
 
     private void soundCard() {
-        LinearLayout sc = card("Sonido y vibración");
-        sc.addView(slider("Vibración", KEY_VIB, 50, 0, 100, true));
-        sc.addView(text("Golpes, caídas, explosiones y la policía. Vibra el mando si tiene motor; si no, la consola.", 14, MUTED));
+        LinearLayout sc = card(L.t("Sonido y vibración", "Sound and vibration"));
+        sc.addView(slider(L.t("Vibración", "Vibration"), KEY_VIB, 50, 0, 100, true));
+        sc.addView(text(L.t("Golpes, caídas, explosiones y la policía. Vibra el mando si tiene motor; si no, la consola.", "Hits, falls, explosions and the police. The gamepad vibrates if it has a motor; if not, the console."), 14, MUTED));
         boolean m = prefs.getBoolean(KEY_MUSIC, true);
-        sc.addView(button(m ? "Música del menú: SÍ" : "Música del menú: NO", false, v -> {
+        sc.addView(button(m ? L.t("Música del menú: SÍ", "Menu music: ON") : L.t("Música del menú: NO", "Menu music: OFF"), false, v -> {
             prefs.edit().putBoolean(KEY_MUSIC, !m).apply();
             updateMusic();
             render();
@@ -468,9 +480,9 @@ public class LauncherActivity extends Activity {
 
     private void renderMap() {
         final java.util.Map<Integer, Integer> map = Keys.load(prefs);
-        LinearLayout c = card("Botones del mando");
-        c.addView(text("Cada fila es una acción del juego. Toca una fila y pulsa en el mando el botón que quieras "
-                + "para ella; puedes poner varios botones a la misma acción. La cruceta y el stick siempre mueven al personaje.", 13, MUTED));
+        LinearLayout c = card(L.t("Botones del mando", "Gamepad buttons"));
+        c.addView(text(L.t("Cada fila es una acción del juego. Toca una fila y pulsa en el mando el botón que quieras ", "Each row is a game action. Tap a row and press the gamepad button you want ")
+                + L.t("para ella; puedes poner varios botones a la misma acción. La cruceta y el stick siempre mueven al personaje.", "for it; you can give several buttons to the same action. The d-pad and the stick always move the character."), 13, MUTED));
         for (int i = 0; i < Keys.TARGETS.length; i++) {
             final int target = Keys.TARGETS[i];
             final String label = Keys.TARGET_LABELS[i];
@@ -481,21 +493,21 @@ public class LauncherActivity extends Activity {
                     who.append(Keys.padName(e.getKey()));
                 }
             }
-            String shown = who.length() == 0 ? "sin botón" : who.toString();
+            String shown = who.length() == 0 ? L.t("sin botón", "no button") : who.toString();
             Button b = button(label + "   ←   " + shown, false, v -> captureButton(target, label));
             b.setGravity(Gravity.CENTER_VERTICAL | Gravity.LEFT);
             c.addView(b, lpMatch());
         }
-        c.addView(button("Restablecer botones de serie", false, v -> { Keys.reset(prefs); render(); }), lpMatch());
-        root.addView(button("Volver", true, v -> { mapScreen = false; render(); }), lpMatch());
+        c.addView(button(L.t("Restablecer botones de serie", "Restore default buttons"), false, v -> { Keys.reset(prefs); render(); }), lpMatch());
+        root.addView(button(L.t("Volver", "Back"), true, v -> { mapScreen = false; render(); }), lpMatch());
     }
 
     private void captureButton(final int target, String label) {
         final AlertDialog dlg = new AlertDialog.Builder(this)
                 .setTitle(label)
-                .setMessage("Pulsa ahora en el mando el botón que quieres usar para esta tecla.")
-                .setNegativeButton("Cancelar", null)
-                .setNeutralButton("Quitar sus botones", (d, w) -> {
+                .setMessage(L.t("Pulsa ahora en el mando el botón que quieres usar para esta tecla.", "Now press the gamepad button you want to use for this key."))
+                .setNegativeButton(L.t("Cancelar", "Cancel"), null)
+                .setNeutralButton(L.t("Quitar sus botones", "Remove its buttons"), (d, w) -> {
                     java.util.Map<Integer, Integer> m = Keys.load(prefs);
                     java.util.Iterator<java.util.Map.Entry<Integer, Integer>> it = m.entrySet().iterator();
                     while (it.hasNext()) if (it.next().getValue() == target) it.remove();
@@ -522,10 +534,10 @@ public class LauncherActivity extends Activity {
 
     private void confirmDelete(Profiles profiles, String name) {
         new AlertDialog.Builder(this)
-                .setTitle("Borrar perfil")
-                .setMessage("¿Borrar el perfil \"" + name + "\" y todas sus partidas?")
-                .setPositiveButton("Borrar", (d, w) -> { report(profiles.delete(name)); render(); })
-                .setNegativeButton("Cancelar", null)
+                .setTitle(L.t("Borrar perfil", "Delete profile"))
+                .setMessage(L.t("¿Borrar el perfil \"", "Delete the profile \"") + name + L.t("\" y todas sus partidas?", "\" and all its saves?"))
+                .setPositiveButton(L.t("Borrar", "Delete"), (d, w) -> { report(profiles.delete(name)); render(); })
+                .setNegativeButton(L.t("Cancelar", "Cancel"), null)
                 .show();
     }
 
@@ -537,14 +549,14 @@ public class LauncherActivity extends Activity {
         et.setText(profiles.suggestName());
         et.setSelectAllOnFocus(true);
         AlertDialog dlg = new AlertDialog.Builder(this)
-                .setTitle("Nuevo perfil")
-                .setMessage("Empieza con una partida nueva, sin nada desbloqueado. Puedes cambiar el nombre o dejar el propuesto.")
+                .setTitle(L.t("Nuevo perfil", "New profile"))
+                .setMessage(L.t("Empieza con una partida nueva, sin nada desbloqueado. Puedes cambiar el nombre o dejar el propuesto.", "Starts with a new save, nothing unlocked. You can change the name or keep the suggested one."))
                 .setView(et)
-                .setPositiveButton("Crear", (d, w) -> {
+                .setPositiveButton(L.t("Crear", "Create"), (d, w) -> {
                     report(profiles.create(et.getText().toString(), Profiles.ASSET_BASE));
                     render();
                 })
-                .setNegativeButton("Cancelar", null)
+                .setNegativeButton(L.t("Cancelar", "Cancel"), null)
                 .create();
         if (dlg.getWindow() != null) {
             dlg.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
@@ -556,9 +568,9 @@ public class LauncherActivity extends Activity {
     private void report(String error) {
         if (error == null) return;
         new AlertDialog.Builder(this)
-                .setTitle("No se pudo completar")
+                .setTitle(L.t("No se pudo completar", "Could not be done"))
                 .setMessage(error)
-                .setPositiveButton("Aceptar", null)
+                .setPositiveButton(L.t("Aceptar", "OK"), null)
                 .show();
     }
 
@@ -590,7 +602,7 @@ public class LauncherActivity extends Activity {
     }
 
     private static String sliderText(String label, int v, boolean zeroIsOff) {
-        return label + ": " + (zeroIsOff && v == 0 ? "NO" : v + "%");
+        return label + ": " + (zeroIsOff && v == 0 ? L.t("NO", "OFF") : v + "%");
     }
 
     /** SeekBar in the theme's colours, with a clear ring around the knob when it has the focus. */
@@ -619,18 +631,18 @@ public class LauncherActivity extends Activity {
 
     /** "Juego en red" card. Without game data (dir == null) only joining is offered. */
     private void netCard(final File dir, final File dat) {
-        LinearLayout nc = card("Juego en red (2 jugadores)");
-        nc.addView(text("Como en The Outfoxies: la consola que crea la partida ejecuta el juego y es el jugador 1; "
-                + "la otra recibe la imagen y el sonido y juega como jugador 2. El que se une no necesita los datos "
-                + "del juego, solo esta misma APK. Para entrar en mitad de una partida, el jugador 2 pulsa START.", 13, MUTED));
+        LinearLayout nc = card(L.t("Juego en red (2 jugadores)", "Network play (2 players)"));
+        nc.addView(text(L.t("Como en The Outfoxies: la consola que crea la partida ejecuta el juego y es el jugador 1; ", "Like in The Outfoxies: the console that creates the game runs it and is player 1; ")
+                + L.t("la otra recibe la imagen y el sonido y juega como jugador 2. El que se une no necesita los datos ", "the other one receives the picture and the sound and plays as player 2. Whoever joins does not need the game ")
+                + L.t("del juego, solo esta misma APK. Para entrar en mitad de una partida, el jugador 2 pulsa START.", "data, just this same APK. To join in the middle of a game, player 2 presses START."), 13, MUTED));
         if (dir != null) {
-            nc.addView(button("Crear partida (jugador 1)", false, v -> launch(dir, dat, "host")), lpMatch());
+            nc.addView(button(L.t("Crear partida (jugador 1)", "Create game (player 1)"), false, v -> launch(dir, dat, "host")), lpMatch());
         }
-        nc.addView(button("Unirse en la misma wifi", false, v -> searchLan()), lpMatch());
-        nc.addView(button("Unirse por internet (con código)", false, v -> askCode()), lpMatch());
-        nc.addView(text("Por internet: quien crea la partida ve un código de 8 letras en la parte de arriba de la pantalla. "
-                + "Si su router no deja entrar (CGNAT, datos móviles...), el código va por un servidor intermedio "
-                + "(bore.pub) y funciona igual, con algo más de retraso.", 13, MUTED));
+        nc.addView(button(L.t("Unirse en la misma wifi", "Join on the same wifi"), false, v -> searchLan()), lpMatch());
+        nc.addView(button(L.t("Unirse por internet (con código)", "Join over the internet (with a code)"), false, v -> askCode()), lpMatch());
+        nc.addView(text(L.t("Por internet: quien crea la partida ve un código de 8 letras en la parte de arriba de la pantalla. ", "Over the internet: whoever creates the game sees an 8-letter code at the top of the screen. ")
+                + L.t("Si su router no deja entrar (CGNAT, datos móviles...), el código va por un servidor intermedio ", "If their router does not let anyone in (CGNAT, mobile data...), the code goes through a relay server ")
+                + L.t("(bore.pub) y funciona igual, con algo más de retraso.", "(bore.pub) and works the same, with a little more delay."), 13, MUTED));
     }
 
     private void launchGuest(String target) {
@@ -645,22 +657,22 @@ public class LauncherActivity extends Activity {
         final EditText et = new EditText(this);
         et.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         et.setSingleLine(true);
-        et.setHint("ABCD-EFGH  (o una IP)");
+        et.setHint(L.t("ABCD-EFGH  (o una IP)", "ABCD-EFGH  (or an IP)"));
         et.setText(prefs.getString("net_last_code", ""));
         et.setSelectAllOnFocus(true);
         AlertDialog dlg = new AlertDialog.Builder(this)
-                .setTitle("Unirse por internet")
-                .setMessage("Escribe el código que ve en su pantalla quien ha creado la partida. "
-                        + "También vale una dirección IP (por ejemplo, la de Tailscale).")
+                .setTitle(L.t("Unirse por internet", "Join over the internet"))
+                .setMessage(L.t("Escribe el código que ve en su pantalla quien ha creado la partida. ", "Type the code shown on the screen of whoever created the game. ")
+                        + L.t("También vale una dirección IP (por ejemplo, la de Tailscale).", "An IP address works too (for example, a Tailscale one)."))
                 .setView(et)
-                .setPositiveButton("Entrar", (d, w) -> {
+                .setPositiveButton(L.t("Entrar", "Join"), (d, w) -> {
                     String c = et.getText().toString().trim().toUpperCase(java.util.Locale.ROOT);
                     if (c.isEmpty()) return;
                     prefs.edit().putString("net_last_code", c).apply();
                     boolean ip = c.matches("[0-9.:]+") || c.contains(".");
                     launchGuest((ip ? "join:" : "code:") + c);
                 })
-                .setNegativeButton("Cancelar", null)
+                .setNegativeButton(L.t("Cancelar", "Cancel"), null)
                 .create();
         if (dlg.getWindow() != null) dlg.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         dlg.show();
@@ -671,12 +683,12 @@ public class LauncherActivity extends Activity {
         final LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
         list.setPadding(dp(16), dp(8), dp(16), dp(8));
-        final TextView status = text("Buscando partidas en esta wifi...", 14, 0xFF333333);
+        final TextView status = text(L.t("Buscando partidas en esta wifi...", "Searching for games on this wifi..."), 14, 0xFF333333);
         list.addView(status);
         final AlertDialog dlg = new AlertDialog.Builder(this)
-                .setTitle("Unirse en la misma wifi")
+                .setTitle(L.t("Unirse en la misma wifi", "Join on the same wifi"))
                 .setView(list)
-                .setNegativeButton("Cancelar", null)
+                .setNegativeButton(L.t("Cancelar", "Cancel"), null)
                 .create();
         final java.util.Set<String> seen = new java.util.HashSet<>();
         final boolean[] stop = { false };
@@ -711,19 +723,19 @@ public class LauncherActivity extends Activity {
                         if (!seen.add(ip)) continue;
                         ui.post(() -> {
                             if (stop[0]) return;
-                            status.setText("Partidas encontradas (toca una para entrar):");
-                            Button b = button("Partida en " + ip, true, v -> { dlg.dismiss(); launchGuest("join:" + ip); });
+                            status.setText(L.t("Partidas encontradas (toca una para entrar):", "Games found (tap one to join):"));
+                            Button b = button(L.t("Partida en ", "Game at ") + ip, true, v -> { dlg.dismiss(); launchGuest("join:" + ip); });
                             list.addView(b, lpMatch());
                         });
                     } catch (java.net.SocketTimeoutException ignored) {}
                     if (seen.isEmpty() && now - start > 8000) {
                         start = Long.MAX_VALUE / 2;
-                        ui.post(() -> status.setText("Aún no aparece ninguna. Comprueba que la otra consola ha pulsado "
-                                + "\"Crear partida\" y que las dos están en la misma wifi. Se sigue buscando..."));
+                        ui.post(() -> status.setText(L.t("Aún no aparece ninguna. Comprueba que la otra consola ha pulsado ", "None yet. Check that the other console has pressed ")
+                                + L.t("\"Crear partida\" y que las dos están en la misma wifi. Se sigue buscando...", "\"Create game\" and that both are on the same wifi. Still searching...")));
                     }
                 }
             } catch (Exception e) {
-                ui.post(() -> status.setText("No se puede buscar: " + e.getMessage()));
+                ui.post(() -> status.setText(L.t("No se puede buscar: ", "Cannot search: ") + e.getMessage()));
             } finally {
                 if (sock != null) sock.close();
             }
@@ -817,7 +829,7 @@ public class LauncherActivity extends Activity {
         try {
             startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE), REQ_TREE);
         } catch (Exception e) {
-            toast("No hay selector de carpetas en este dispositivo");
+            toast(L.t("No hay selector de carpetas en este dispositivo", "There is no folder picker on this device"));
         }
     }
 
@@ -827,7 +839,7 @@ public class LauncherActivity extends Activity {
         if (req == REQ_TREE && res == RESULT_OK && data != null && data.getData() != null) {
             String path = treeToPath(data.getData());
             if (path == null) {
-                toast("No se pudo usar esa carpeta");
+                toast(L.t("No se pudo usar esa carpeta", "That folder could not be used"));
             } else {
                 prefs.edit().putString(KEY_DIR, path).apply();
             }

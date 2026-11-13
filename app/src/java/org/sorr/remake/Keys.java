@@ -41,9 +41,9 @@ public final class Keys {
             KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_ESCAPE };
 
     public static final String[] TARGET_LABELS = {
-            "Especial (tecla X)", "Ataque (tecla C)", "Salto (tecla V)", "Combo especial (tecla B)",
-            "Combo final (tecla S)", "Policía (tecla A)", "Golpear atrás (tecla D)",
-            "Start / pausa (Enter)", "Menú / atrás (Esc)" };
+            L.t("Especial (tecla X)", "Special (key X)"), L.t("Ataque (tecla C)", "Attack (key C)"), L.t("Salto (tecla V)", "Jump (key V)"), L.t("Combo especial (tecla B)", "Special combo (key B)"),
+            L.t("Combo final (tecla S)", "Final combo (key S)"), L.t("Policía (tecla A)", "Police (key A)"), L.t("Golpear atrás (tecla D)", "Back attack (key D)"),
+            L.t("Start / pausa (Enter)", "Start / pause (Enter)"), L.t("Menú / atrás (Esc)", "Menu / back (Esc)") };
 
     /** Directions are fixed: they never go through the table. */
     public static int direction(int keyCode) {
@@ -138,12 +138,12 @@ public final class Keys {
             case KeyEvent.KEYCODE_BUTTON_START: return "Start";
             case KeyEvent.KEYCODE_BUTTON_SELECT: return "Select";
             case KeyEvent.KEYCODE_BUTTON_MODE: return "Home";
-            case KeyEvent.KEYCODE_BACK: return "Atrás";
+            case KeyEvent.KEYCODE_BACK: return L.t("Atrás", "Back");
             default:
                 String s = KeyEvent.keyCodeToString(keyCode);
-                if (s.startsWith("KEYCODE_BUTTON_")) return "Botón " + s.substring(15);
+                if (s.startsWith("KEYCODE_BUTTON_")) return L.t("Botón ", "Button ") + s.substring(15);
                 if (s.startsWith("KEYCODE_")) return s.substring(8);
-                return "Botón " + keyCode;
+                return L.t("Botón ", "Button ") + keyCode;
         }
     }
 }

@@ -48,6 +48,14 @@ static SDL_mutex *smx;
 static char msg[256];
 static Uint32 msg_until;
 
+/* Idioma de los avisos: el del sistema (GameActivity pone SORR_LANG); castellano si es "es", si no ingles */
+int sorrnet_en(void)
+{
+    static int v = -1;
+    if (v < 0) { const char *l = getenv("SORR_LANG"); v = !(l && !strncmp(l, "es", 2)); }
+    return v;
+}
+
 void sorrnet_set_status(const char *s, int ms)
 {
     if (!smx) smx = SDL_CreateMutex();
@@ -68,8 +76,8 @@ const char *sorrnet_status(void)
         msg[0] = 0;
         out[0] = 0;
         if (role == ROLE_HOST && !net_connected()) {
-            const char *in = net_inet_status(0);
-            snprintf(out, sizeof out, "Juego en red: esperando al jugador 2.\n%s%s%s", net_status(0), *in ? "\n" : "", in);
+            const char *in = net_inet_status(sorrnet_en());
+            snprintf(out, sizeof out, sorrnet_en() ? "Network play: waiting for player 2.\n%s%s%s" : "Juego en red: esperando al jugador 2.\n%s%s%s", net_status(sorrnet_en()), *in ? "\n" : "", in);
         }
     }
     SDL_UnlockMutex(smx);
@@ -89,7 +97,7 @@ void sorrnet_init(void)
             fprintf(stderr, "net: partida abierta\n");
         } else {
             fprintf(stderr, "net: no se ha podido abrir el puerto\n");
-            sorrnet_set_status("Juego en red: no se ha podido abrir la partida (¿hay otra abierta?)", 8000);
+            sorrnet_set_status(sorrnet_en() ? "Network play: could not open the game (is another one open?)" : "Juego en red: no se ha podido abrir la partida (¿hay otra abierta?)", 8000);
         }
     } else if (!strncmp(e, "join:", 5) || !strncmp(e, "code:", 5)) {
         role = ROLE_GUEST;
@@ -136,7 +144,8 @@ void sorrnet_audio_open(int rate, unsigned short format, int channels)
 
 /* ---------- pruebas ---------- */
 static unsigned char inj[128];
-static int frame_no;
+int sorrnet_frame_no;   /* tambien lo usa sorrvib.c (SORR_SNDLOG) */
+#define frame_no sorrnet_frame_no
 static void test_hooks(const void *pixels, int w, int h, int pitch, int bpp)
 {
     static int init, nkeys, kf[64], kc[64], kd[64], nshots, shots[64], maxf;
@@ -208,10 +217,10 @@ void sorrnet_frame(const void *pixels, int w, int h, int pitch, int bpp)
     switch (net_host_event()) {
     case 1:
         load_p2_keys();     /* por si se han cambiado en el juego */
-        sorrnet_set_status("¡El jugador 2 se ha conectado!", 4000);
+        sorrnet_set_status(sorrnet_en() ? "Player 2 has joined!" : "¡El jugador 2 se ha conectado!", 4000);
         break;
     case 2:
-        sorrnet_set_status("El jugador 2 se ha desconectado.", 4000);
+        sorrnet_set_status(sorrnet_en() ? "Player 2 has left." : "El jugador 2 se ha desconectado.", 4000);
         break;
     }
     if (!net_connected()) return;

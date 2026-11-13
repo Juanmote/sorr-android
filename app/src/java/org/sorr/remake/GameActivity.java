@@ -74,6 +74,7 @@ public class GameActivity extends SDLActivity implements TouchOverlay.KeySink {
             android.system.Os.setenv("SDL_JOYSTICK_HIDAPI", "0", true);
             android.system.Os.setenv("SORR_FILTER", LauncherActivity.filterMode(p), true);
             android.system.Os.setenv("SORR_COLORS", p.getString(LauncherActivity.KEY_COLORS, "original"), true);
+            android.system.Os.setenv("SORR_LANG", L.code(), true);
             android.system.Os.setenv("SORR_VIB", String.valueOf(p.getInt(LauncherActivity.KEY_VIB, 50)), true);
         } catch (Exception ignored) {}
         super.onCreate(savedInstanceState);
@@ -150,8 +151,13 @@ public class GameActivity extends SDLActivity implements TouchOverlay.KeySink {
         netHandler.removeCallbacks(netPoll);
         if (netLock != null) try { netLock.release(); } catch (Exception ignored) {}
         super.onDestroy();
-        // The engine keeps global state: always start it in a fresh process
-        if (isFinishing()) android.os.Process.killProcess(android.os.Process.myPid());
+        if (isFinishing()) {
+            // Normal exit from the game: tell the launcher (other process) to close too. After a crash this
+            // file is not written, so the launcher stays and saves the logcat.
+            try { new java.io.File(getFilesDir(), LauncherActivity.EXIT_FLAG).createNewFile(); } catch (Exception ignored) {}
+            // The engine keeps global state: always start it in a fresh process
+            android.os.Process.killProcess(android.os.Process.myPid());
+        }
     }
 
     // ---- vibration (called from the engine, engine/modules/libnet/sorrvib.c) ----

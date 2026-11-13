@@ -28,15 +28,40 @@ static Uint32 busy_until;
 static int busy_strength, dirty;
 static Uint32 last_write;
 
-enum { V_NONE, V_JUMP, V_HIT, V_HEAVY, V_EXPLO, V_POLICE, V_COUNT };
-static const int v_str[V_COUNT] = {0, 22, 50, 68, 80, 90};
-static const int v_ms[V_COUNT] = {0, 45, 85, 160, 260, 420};
-static const char *v_name[V_COUNT] = {"-", "salto", "golpe", "fuerte", "explosion", "policia"};
+enum { V_NONE, V_JUMP, V_HIT, V_SPECIAL, V_HEAVY, V_HURT, V_EXPLO, V_POLICE, V_COUNT };
+/* fuerza (con la intensidad del lanzador al 50 %) y duracion */
+static const int v_str[V_COUNT] = {0, 25, 50, 60, 70, 85, 90, 100};
+static const int v_ms[V_COUNT] = {0, 40, 70, 110, 140, 200, 280, 450};
+static const char *v_name[V_COUNT] = {"-", "salto", "golpe", "especial", "fuerte", "dano", "explosion", "policia"};
+
+/* Sonidos de SorR 5.2 (data/*.wav dentro de SorR.dat), comprobados ejecutando el juego en el escritorio y mirando
+   que pasa en pantalla cuando suena cada uno (13-11-2026). Al aire los golpes no suenan: se1 es golpe que entra,
+   lo de o lo reciba el jugador. Menus (se24, se25, se62), flecha GO (se26), aterrizaje (se30), fallos de los
+   enemigos (se50, se54) y voces (sev*, seaxel*...) no vibran. */
+static const struct { const char *name; int cls; } known[] = {
+    {"se1", V_HIT}, {"se5", V_HIT}, {"se11", V_HIT}, {"se14", V_HIT}, {"se16", V_HIT}, {"se23", V_HIT}, {"se44", V_HIT},
+    {"se17", V_SPECIAL},
+    {"se59", V_HEAVY}, {"se60", V_HEAVY}, {"se61", V_HEAVY}, {"se45", V_HEAVY}, {"se3", V_HEAVY}, {"se6", V_HEAVY},
+    {"se12", V_HEAVY},
+    {"se37", V_HURT},
+    {"se47", V_EXPLO}, {"se49", V_EXPLO}, {"se56", V_EXPLO}, {"se81", V_EXPLO},
+    {"se41", V_POLICE}, {"se77", V_POLICE}, {"se84", V_POLICE}, {"se109", V_POLICE},
+    {"se2", V_JUMP},
+};
 
 static int has(const char *s, const char *w) { return strstr(s, w) != NULL; }
 
 static int classify(const char *n)
 {
+    char base[64];
+    int i;
+    /* nombre sin ".wav" ni el prefijo "hq_" de los sonidos de alta calidad */
+    if (!strncmp(n, "hq_", 3)) n += 3;
+    for (i = 0; n[i] && n[i] != '.' && i < 63; i++) base[i] = n[i];
+    base[i] = 0;
+    for (i = 0; i < (int)(sizeof known / sizeof known[0]); i++) if (!strcmp(base, known[i].name)) return known[i].cls;
+    if (base[0] == 's' && base[1] == 'e') return V_NONE;   /* el resto de sonidos del juego: no vibran */
+    /* sonidos de mods con otros nombres: por palabras */
     /* sonidos de menus y cosas que no son del combate */
     if (has(n, "menu") || has(n, "select") || has(n, "cursor") || has(n, "option") || has(n, "beep")
         || has(n, "coin") || has(n, "credit") || has(n, "pause") || has(n, "click") || has(n, "type")
@@ -140,6 +165,10 @@ void sorrvib_played(const void *chunk)
     }
     for (int i = 0; i < nsnd; i++) if (snds[i].chunk == chunk) { s = &snds[i]; break; }
     if (!s) return;
+    if (getenv("SORR_SNDLOG")) {   /* pruebas en escritorio: fotograma y sonido */
+        extern int sorrnet_frame_no;
+        fprintf(stderr, "snd %d %s\n", sorrnet_frame_no, s->name);
+    }
     now = SDL_GetTicks();
     if (!s->plays++) dirty = 2;                /* sonido nuevo: a la lista en unos segundos */
     else if (!dirty) dirty = 1;               /* solo cambian las cuentas: cada medio minuto */
@@ -147,7 +176,8 @@ void sorrvib_played(const void *chunk)
         write_list(); dirty = 0; last_write = now;
     }
     if (!level || s->cls == V_NONE) return;
-    st = v_str[s->cls] * level / 100;
+    st = v_str[s->cls] * level / 50;            /* 50 % = la tabla tal cual, 100 % = el doble */
+    if (st > 100) st = 100;
     if (st <= 0) return;
     /* una mas suave no corta a una mas fuerte que aun dura */
     if (!SDL_TICKS_PASSED(now, busy_until) && st < busy_strength) return;
