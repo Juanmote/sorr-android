@@ -1,6 +1,6 @@
 # Estado del proyecto: port Android de Streets of Rage Remake
 
-Última actualización: 13 de noviembre de 2026 (versión 9 de la APK).
+Última actualización: 13 de noviembre de 2026 (versión 10 de la APK; desde aquí, publicada por GitHub Actions).
 
 ## Qué es
 
@@ -164,10 +164,43 @@ consola; la parte técnica la hace Claude.
   se pausa al salir del lanzador.
 - **Cruceta táctil**: queda translúcida como los botones; solo se ilumina el brazo pulsado (recorte del dibujo).
 
+## Versión 10 (13-11-2026): primera publicada en Releases
+
+- **Releases automáticas**: `.github/workflows/release.yml`. Cada push a `main` (salvo .md, tools/, tests/) compila con
+  `build_apk.sh` en GitHub y publica `vVERSION.N` (N = número de ejecución) con la APK. versionCode = 1000 + N (siempre
+  sube), versionName = `android:versionName` del manifiesto + ".N". La clave sale de los secretos del repositorio
+  (`SORR_KEYSTORE_B64` = jks en base64, `SORR_KEYSTORE_PASS`, `SORR_KEY_ALIAS` opcional; se aceptan otros nombres
+  habituales, ver el workflow). Sin clave falla y no publica. El usuario dice que ya ha subido la clave; no se pueden
+  leer los nombres de los secretos desde la sesión. `build_apk.sh` ahora toma de variables de entorno ROOT, ANDROID_SDK,
+  NDK, SORR_KEYSTORE(_PASS), SORR_KEY_ALIAS/PASS, SORR_VERSION_CODE/NAME, SORR_REQUIRE_KEY; `native/CMakeLists.txt`
+  busca `src/` junto al repo (no ruta fija).
+- **Vibración con los sonidos reales** (la lista por palabras de la v9 no acertaba: los archivos se llaman `se1.wav`...).
+  Comprobado ejecutando el juego en Linux con el SorR.dat del usuario (SORR_SNDLOG=1 da "snd fotograma archivo"):
+  `se1` golpe que entra (lo dé o lo reciba el jugador; al aire no suena nada), `se37` grito del jugador al recibir
+  (fuerte), `se45` caída al suelo, `se59/60/61` remates, `se17` especial, `se2` salto, `se30` aterrizaje, `se50/54`
+  golpes de enemigos que fallan, `se26` flecha GO, `se24/25/62` menús/pausa, `se75` coche de policía de la intro.
+  Explosiones (se47, 49, 56, 81) y policía (se41, 77, 84, 109) asignadas por su forma de onda, sin comprobar en juego.
+  Tabla `known[]` en `sorrvib.c`; nombres que empiezan por "se" y no están en la tabla no vibran; mods: por palabras.
+  Intensidad: 50 % = tabla tal cual, 100 % = el doble.
+- **Salir del juego cierra también el lanzador**: `GameActivity.onDestroy` (salida normal) crea `files/exit_all`; el
+  lanzador lo ve en `onResume` y hace `finishAndRemoveTask()`. Si el juego se cierra por un fallo no se crea, así que el
+  lanzador sigue y guarda el logcat. Al abrir el lanzador de cero se borra un aviso viejo.
+- **Idioma**: `L.java` (`L.t(es, en)`): castellano si el sistema está en castellano, si no inglés. Lanzador, perfiles,
+  tabla de botones y "MENU" táctil. El motor recibe `SORR_LANG` y los avisos del juego en red salen igual
+  (`sorrnet_en()`). Los nombres de perfil ya creados ("Principal") no se traducen.
+- Pruebas en escritorio: SDL2 y SDL_mixer compilados desde `src/` a un prefijo (no hay paquetes -dev), motor con
+  `cmake -S engine -B build -DCMAKE_PREFIX_PATH=prefijo`, paletas generadas de los FPG de 8 bits de SorR.dat
+  (`palettes/{chars,enemies,backup_*}/<nombre>.pal` = "pal\x1a\x0d\x0a\x00" + bytes 7..1351 del FPG).
+  Guion que entra en la fase 1: Enter (28) 40 fotogramas cada 150 hasta el 900; luego C=46 ataque, V=47 salto,
+  X=45 especial, flecha derecha=77. Los archivos embebidos en SorR.dat: entradas de 13 bytes (SName, Flags, SFile,
+  OFile) justo antes de cada nombre.
+
 ## Pendiente
 
-1. Que el usuario pruebe la v9 y mande `sorr_sonidos.txt` (o `SorR.dat`) para afinar qué sonidos vibran.
-2. El usuario irá apuntando más mejoras según juegue.
+1. Comprobar que la primera release de GitHub sale firmada con la clave del usuario (si falla, ver qué nombres de
+   secretos ha usado).
+2. Que el usuario pruebe vibración, idioma y cierre conjunto; confirmar explosiones y policía en juego.
+3. El usuario irá apuntando más mejoras según juegue.
 ## Notas
 
 - El registro mostraba que el juego pide 960x544 al iniciar y luego 416x240: su carpeta de datos
