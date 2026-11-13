@@ -5,8 +5,9 @@ name: Compilar y publicar APK
 #   SORR_KEYSTORE_B64   el archivo sorr-release.jks en base64 (base64 -w0 sorr-release.jks)
 #   SORR_KEYSTORE_PASS  su contrasena (si no se pone: "sorrport", la de la clave que se genero en el chat)
 #   SORR_KEY_ALIAS      opcional (si no se pone, la primera que tenga el almacen)
-# Tambien se aceptan otros nombres habituales (KEYSTORE_B64, KEYSTORE_BASE64, SIGNING_KEY...). Sin clave no se
-# publica nada: una APK firmada con otra clave obligaria a desinstalar.
+# En realidad vale cualquier nombre: se usa el primer secreto que sea un almacen de claves en base64, y como
+# contrasena el primero con PASS en el nombre que lo abra. Sin clave no se publica nada: una APK firmada con otra
+# clave obligaria a desinstalar.
 
 on:
   push:
@@ -29,74 +30,59 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Preparar la clave de firma
         env:
-          K1: ${{ secrets.SORR_KEYSTORE_B64 }}
-          K2: ${{ secrets.SORR_KEYSTORE }}
-          K3: ${{ secrets.KEYSTORE_B64 }}
-          K4: ${{ secrets.KEYSTORE_BASE64 }}
-          K5: ${{ secrets.KEYSTORE }}
-          K6: ${{ secrets.SIGNING_KEY }}
-          K7: ${{ secrets.SIGNING_KEY_B64 }}
-          K8: ${{ secrets.RELEASE_KEYSTORE }}
-          K9: ${{ secrets.SORR_RELEASE_JKS }}
-          K10: ${{ secrets.JKS }}
-          P1: ${{ secrets.SORR_KEYSTORE_PASS }}
-          P2: ${{ secrets.SORR_KEYSTORE_PASSWORD }}
-          P3: ${{ secrets.KEYSTORE_PASS }}
-          P4: ${{ secrets.KEYSTORE_PASSWORD }}
-          P5: ${{ secrets.SIGNING_STORE_PASSWORD }}
-          P6: ${{ secrets.STORE_PASSWORD }}
-          A1: ${{ secrets.SORR_KEY_ALIAS }}
-          A2: ${{ secrets.KEY_ALIAS }}
-          A3: ${{ secrets.SIGNING_KEY_ALIAS }}
-          KP1: ${{ secrets.SORR_KEY_PASS }}
-          KP2: ${{ secrets.KEY_PASSWORD }}
-          KP3: ${{ secrets.SIGNING_KEY_PASSWORD }}
+          ALL_SECRETS: ${{ toJSON(secrets) }}
+          ALL_VARS: ${{ toJSON(vars) }}
         run: |
           set -e
-          key=""
-          for v in K1 K2 K3 K4 K5 K6 K7 K8 K9 K10; do [ -n "${!v}" ] && { key="${!v}"; echo "Clave en el secreto n.º ${v#K}"; break; }; done
-          if [ -z "$key" ]; then
-            echo "::error::No hay clave de firma. Crea el secreto SORR_KEYSTORE_B64 con 'base64 -w0 sorr-release.jks'."
-            exit 1
-          fi
           ks="$RUNNER_TEMP/sorr-release.jks"
-          # en base64 (lo normal) o, si se pego tal cual en texto, PEM/otro: se intenta base64 primero
-          if ! printf '%s' "$key" | tr -d ' \r\n' | base64 -d > "$ks" 2>/dev/null || [ ! -s "$ks" ]; then
-            echo "::error::El secreto de la clave no es base64 valido."
+          echo "Secretos del repositorio (solo nombres): $(printf '%s' "$ALL_SECRETS" | jq -r 'keys | join(", ")')"
+          echo "Variables del repositorio (solo nombres): $(printf '%s' "$ALL_VARS" | jq -r 'keys | join(", ")')"
+          all=$(jq -n --argjson s "$ALL_SECRETS" --argjson v "$ALL_VARS" '$v + $s')
+          # La clave: el primer secreto (o variable) que, leido en base64, sea un almacen JKS o PKCS12
+          found=""
+          for name in $(printf '%s' "$all" | jq -r 'keys[]'); do
+            [ "$name" = "github_token" ] && continue
+            printf '%s' "$all" | jq -r --arg n "$name" '.[$n]' | tr -d ' \r\n' | base64 -d > "$ks.try" 2>/dev/null || continue
+            magic=$(head -c 4 "$ks.try" | od -An -tx1 | tr -d ' \n')
+            case "$magic" in feedfeed|cececece|3082*) found="$name"; mv "$ks.try" "$ks"; break ;; esac
+          done
+          if [ -z "$found" ]; then
+            echo "::error::No hay clave de firma en los secretos. Crea uno (por ejemplo SORR_KEYSTORE_B64) con el contenido de 'base64 -w0 sorr-release.jks'."
             exit 1
           fi
+          echo "Clave: secreto $found"
+          # Contrasena: SORR_KEYSTORE_PASS o cualquier secreto con PASS en el nombre que abra el almacen; si no, "sorrport"
           pass=""
-          for v in P1 P2 P3 P4 P5 P6; do [ -n "${!v}" ] && { pass="${!v}"; break; }; done
-          [ -n "$pass" ] || pass=sorrport
-          alias=""
-          for v in A1 A2 A3; do [ -n "${!v}" ] && { alias="${!v}"; break; }; done
-          if [ -z "$alias" ]; then
-            alias=$(keytool -list -v -keystore "$ks" -storepass "$pass" 2>/dev/null | sed -n 's/^Alias name: //p' | head -1)
-          fi
-          if [ -z "$alias" ]; then
-            echo "::error::No se puede abrir el almacen de claves: revisa la contrasena (secreto SORR_KEYSTORE_PASS)."
+          for name in SORR_KEYSTORE_PASS $(printf '%s' "$all" | jq -r 'keys[] | select(test("PASS|PWD|CLAVE|CONTRA"; "i"))') __default__; do
+            if [ "$name" = "__default__" ]; then try=sorrport; else try=$(printf '%s' "$all" | jq -r --arg n "$name" '.[$n] // empty'); fi
+            [ -n "$try" ] || continue
+            if keytool -list -keystore "$ks" -storepass "$try" > /dev/null 2>&1; then pass="$try"; echo "Contraseña: $name"; break; fi
+          done
+          if [ -z "$pass" ]; then
+            echo "::error::Ninguna contraseña abre el almacen de claves: crea el secreto SORR_KEYSTORE_PASS."
             exit 1
           fi
-          kpass=""
-          for v in KP1 KP2 KP3; do [ -n "${!v}" ] && { kpass="${!v}"; break; }; done
+          echo "::add-mask::$pass"
+          alias=$(printf '%s' "$all" | jq -r '.SORR_KEY_ALIAS // .KEY_ALIAS // empty')
+          [ -n "$alias" ] || alias=$(keytool -list -v -keystore "$ks" -storepass "$pass" 2>/dev/null | sed -n 's/^Alias name: //p' | head -1)
+          kpass=$(printf '%s' "$all" | jq -r '.SORR_KEY_PASS // .KEY_PASSWORD // empty')
           [ -n "$kpass" ] || kpass="$pass"
+          echo "::add-mask::$kpass"
           echo "Alias: $alias"
           keytool -list -v -keystore "$ks" -storepass "$pass" -alias "$alias" | grep -E "SHA256:" | head -1
           {
             echo "SORR_KEYSTORE=$ks"
             echo "SORR_KEY_ALIAS=$alias"
+            echo "SORR_KEYSTORE_PASS=$pass"
+            echo "SORR_KEY_PASS=$kpass"
           } >> "$GITHUB_ENV"
-          echo "::add-mask::$pass"
-          echo "::add-mask::$kpass"
-          echo "SORR_KEYSTORE_PASS=$pass" >> "$GITHUB_ENV"
-          echo "SORR_KEY_PASS=$kpass" >> "$GITHUB_ENV"
 
       - name: Instalar SDK y NDK de Android
         run: |
