@@ -170,8 +170,13 @@ consola; la parte técnica la hace Claude.
   `build_apk.sh` en GitHub y publica `vVERSION.N` (N = número de ejecución) con la APK. versionCode = 1000 + N (siempre
   sube), versionName = `android:versionName` del manifiesto + ".N". La clave sale de los secretos del repositorio
   (`SORR_KEYSTORE_B64` = jks en base64, `SORR_KEYSTORE_PASS`, `SORR_KEY_ALIAS` opcional; se aceptan otros nombres
-  habituales, ver el workflow). Sin clave falla y no publica. El usuario dice que ya ha subido la clave; no se pueden
-  leer los nombres de los secretos desde la sesión. `build_apk.sh` ahora toma de variables de entorno ROOT, ANDROID_SDK,
+  habituales: en realidad el workflow usa el primer secreto que sea un almacén JKS/PKCS12 en base64 y la primera
+  contraseña con PASS en el nombre que lo abra, y escribe en el registro los NOMBRES de los secretos). Los registros
+  de Actions se leen con `gh api repos/Juanmote/sorr-android/actions/jobs/<id>/logs` (el id sale de
+  `commits/<sha>/check-runs`). **Secretos que puso el usuario: `MOD_KEYSTORE_B64` y `MOD_KEYSTORE_PASSWORD`, alias
+  `mod` (la clave de Master of Darkness), SHA-256 63:54:07:35:...:E4:38.** No es la de la v9 (84:BD:F7:...): pasar
+  de la v9 a la v10.2 exige desinstalar una vez; a partir de ahí todas las releases se instalan encima.
+  Primera release: v10.2 (13-11-2026). `build_apk.sh` ahora toma de variables de entorno ROOT, ANDROID_SDK,
   NDK, SORR_KEYSTORE(_PASS), SORR_KEY_ALIAS/PASS, SORR_VERSION_CODE/NAME, SORR_REQUIRE_KEY; `native/CMakeLists.txt`
   busca `src/` junto al repo (no ruta fija).
 - **Vibración con los sonidos reales** (la lista por palabras de la v9 no acertaba: los archivos se llaman `se1.wav`...).
@@ -197,10 +202,8 @@ consola; la parte técnica la hace Claude.
 
 ## Pendiente
 
-1. Comprobar que la primera release de GitHub sale firmada con la clave del usuario (si falla, ver qué nombres de
-   secretos ha usado).
-2. Que el usuario pruebe vibración, idioma y cierre conjunto; confirmar explosiones y policía en juego.
-3. El usuario irá apuntando más mejoras según juegue.
+1. Que el usuario pruebe vibración, idioma y cierre conjunto; confirmar explosiones y policía en juego.
+2. El usuario irá apuntando más mejoras según juegue.
 ## Notas
 
 - El registro mostraba que el juego pide 960x544 al iniciar y luego 416x240: su carpeta de datos
