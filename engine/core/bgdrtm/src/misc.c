@@ -310,9 +310,22 @@ void bgdrtm_entry( int argc, char * argv[] )
  *
  */
 
+/* Android: salida normal del juego -> aviso al lanzador (otro proceso) para que se cierre tambien.
+   GameActivity pone en SORR_EXIT_FLAG la ruta del aviso. Tras un cierre por fallo no se escribe. */
+void sorr_signal_exit( void )
+{
+    const char * f = getenv( "SORR_EXIT_FLAG" );
+    if ( f && *f )
+    {
+        FILE * fp = fopen( f, "w" );
+        if ( fp ) fclose( fp );
+    }
+}
+
 void bgdrtm_exit( int exit_value )
 {
     int n;
+    sorr_signal_exit();
     /* Finalize all modules */
     if ( module_finalize_count )
         for ( n = 0; n < module_finalize_count; n++ )

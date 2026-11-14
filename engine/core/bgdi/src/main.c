@@ -254,7 +254,7 @@ int main( int argc, char *argv[] )
 
     /* Juego en red (SORR_NET): el invitado no carga el juego, solo recibe imagen y sonido */
     sorrnet_init();
-    if ( sorrnet_is_guest() ) return sorrnet_guest_main();
+    if ( sorrnet_is_guest() ) { extern void sorr_signal_exit( void ); int r = sorrnet_guest_main(); sorr_signal_exit(); return r; }
 
 #ifdef TARGET_PSP
     PSP_HEAP_SIZE_MAX ();

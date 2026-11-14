@@ -12,7 +12,7 @@ name: Compilar y publicar APK
 on:
   push:
     branches: [ main ]
-    paths-ignore: [ '**.md', 'tools/**', 'tests/**' ]
+    paths-ignore: [ '**.md', 'tools/**', 'tests/**', 'docs/**' ]
   workflow_dispatch:
 
 permissions:
@@ -101,35 +101,40 @@ jobs:
           git clone -q --depth 1 -b "$PNG_TAG" https://github.com/pnggroup/libpng src/libpng
 
       - name: Compilar la APK
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -e
-          vname=$(sed -n 's/.*android:versionName="\([^"]*\)".*/\1/p' app/AndroidManifest.xml)
+          base=$(sed -n 's/.*android:versionName="\([^"]*\)".*/\1/p' app/AndroidManifest.xml)
+          # La primera compilacion de cada version sale con su nombre limpio (v1.0); las siguientes, v1.0.N
+          if gh release view "v$base" > /dev/null 2>&1; then vname="$base.${{ github.run_number }}"; else vname="$base"; fi
           echo "VNAME=$vname" >> "$GITHUB_ENV"
+          echo "VBASE=$base" >> "$GITHUB_ENV"
           # versionCode siempre creciente para que cada APK se instale encima de la anterior
           SORR_REQUIRE_KEY=1 SORR_VERSION_CODE=$((1000 + ${{ github.run_number }})) \
-            SORR_VERSION_NAME="$vname.${{ github.run_number }}" ROOT="$GITHUB_WORKSPACE" bash build_apk.sh
+            SORR_VERSION_NAME="$vname" ROOT="$GITHUB_WORKSPACE" bash build_apk.sh
           mkdir -p salida
-          cp out/SorR-Android.apk "salida/SorR-Android-v$vname.${{ github.run_number }}.apk"
+          cp out/SorR-Android.apk "salida/SorR-Android-v$vname.apk"
           "$ANDROID_SDK/build-tools/35.0.0/apksigner" verify --print-certs out/SorR-Android.apk | grep -i "SHA-256"
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: SorR-Android
-          path: salida/*.apk
-
+      # La APK va directa a la Release (sin artefactos: el almacenamiento de Actions es limitado)
       - name: Publicar release
         env:
           GH_TOKEN: ${{ github.token }}
           COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
           set -e
-          tag="v$VNAME.${{ github.run_number }}"
-          {
-            echo "Compilación automática del commit ${GITHUB_SHA::7}. / Automatic build of commit ${GITHUB_SHA::7}."
-            echo
-            printf '%s\n' "${COMMIT_MSG:-Compilación manual}" | grep -v "^Co-Authored-By\|^Claude-Session"
-            echo
-            echo "Necesitas el juego de PC (Streets of Rage Remake 5.2): la carpeta con SorR.dat, mod/ y palettes/."
-            echo "You need the PC game (Streets of Rage Remake 5.2): the folder with SorR.dat, mod/ and palettes/."
-          } > notas.md
+          tag="v$VNAME"
+          if [ "$VNAME" = "$VBASE" ] && [ -f "docs/notas-v$VBASE.md" ]; then
+            cp "docs/notas-v$VBASE.md" notas.md
+          else
+            {
+              echo "Compilación automática del commit ${GITHUB_SHA::7}. / Automatic build of commit ${GITHUB_SHA::7}."
+              echo
+              printf '%s\n' "${COMMIT_MSG:-Compilación manual}" | grep -v "^Co-Authored-By\|^Claude-Session"
+              echo
+              echo "Necesitas el juego de PC (Streets of Rage Remake 5.2): la carpeta con SorR.dat, mod/ y palettes/."
+              echo "You need the PC game (Streets of Rage Remake 5.2): the folder with SorR.dat, mod/ and palettes/."
+            } > notas.md
+          fi
           gh release create "$tag" salida/*.apk --title "Streets of Rage Remake Android $tag" --notes-file notas.md --latest

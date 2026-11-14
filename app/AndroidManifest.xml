@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="org.sorr.remake"
     android:versionCode="10"
-    android:versionName="10"
+    android:versionName="1.0"
     android:installLocation="auto">
 
     <uses-feature android:glEsVersion="0x00020000" />

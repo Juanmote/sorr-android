@@ -1,6 +1,6 @@
 # Estado del proyecto: port Android de Streets of Rage Remake
 
-Última actualización: 13 de noviembre de 2026 (versión 10 de la APK; desde aquí, publicada por GitHub Actions).
+Última actualización: 14 de noviembre de 2026 (versión 1.0, primera para los testers del usuario).
 
 ## Qué es
 
@@ -200,9 +200,34 @@ consola; la parte técnica la hace Claude.
   X=45 especial, flecha derecha=77. Los archivos embebidos en SorR.dat: entradas de 13 bytes (SName, Flags, SFile,
   OFile) justo antes de cada nombre.
 
+## Versión 1.0 (14-11-2026): lanzamiento para testers
+
+- **Salir del juego vuelve a Android (arreglo de verdad)**: el aviso de la v10 no funcionaba porque al elegir "Salir" el
+  motor acaba con `bgdrtm_exit()` → `exit()` de C: el proceso `:game` muere sin pasar por `GameActivity.onDestroy`, así
+  que nunca se creaba `files/exit_all`. Ahora `GameActivity` pone `SORR_EXIT_FLAG` (ruta del aviso, se borra al
+  arrancar) y `sorr_signal_exit()` (`engine/core/bgdrtm/src/misc.c`) lo crea justo antes del `exit()`; también tras
+  `sorrnet_guest_main()` (invitado). El lanzador lo ve en `onResume` y se cierra. Tras un cierre por fallo no se crea.
+  Comprobado en Linux: Menú principal → Salir crea el archivo y el proceso termina solo.
+- **Versión**: `android:versionName="1.0"`. El workflow publica `v1.0` (nombre limpio) la primera vez que compila una
+  versión nueva del manifiesto (si no existe esa release) y `v1.0.N` en las siguientes; versionCode sigue siendo
+  1000 + N. Si existe `docs/notas-vX.md`, son las notas de la release `vX`. Ya no se suben artefactos a Actions
+  (preferencia del usuario: la APK va directa a la Release). `docs/**` no dispara compilación.
+- **README de presentación** (castellano, con resumen en inglés) e imágenes en `docs/img/`:
+  - Capturas del juego REALES, sacadas con el motor compilado para Linux y los datos del usuario, con un motor de
+    pruebas aparte (no está en el repo) que usa `sorrvideo` en escritorio, ventana `SORR_WINW/H` y guarda la salida ya
+    filtrada con `SORR_OUTSHOT=prefijo SORR_OUTSHOTS=n` (SDL_RenderReadPixels; renderer software y
+    `SDL_RenderSetLogicalSize(0,0)` como en Android). Guion de teclas para llegar a la fase 1 y pegar a Galsia:
+    Enter 40 fotogramas en 100, 250 ... 850; derecha (77) 12 fotogramas cada 15 desde 1000; C (46) cada 22 desde 1006;
+    captura en el 1200.
+  - `tactil.jpg`: los `tc_*.webp` colocados con la misma geometría que `TouchOverlay.onSizeChanged` (opacidad 50 %).
+  - Capturas del LANZADOR: recreaciones en HTML con los mismos recursos (arte, fuentes, colores, textos) a 1920x1080,
+    porque no se puede ejecutar Android aquí. Si el usuario manda capturas reales, sustituirlas con el mismo nombre.
+- Menú principal del juego: Enter (28) en el 100 (40 fotogramas) salta la intro, Enter en el 300 (6) entra al menú,
+  arriba (72) lleva a SALIR. Sin `savegame/` el juego abre el editor de perfil.
+
 ## Pendiente
 
-1. Que el usuario pruebe vibración, idioma y cierre conjunto; confirmar explosiones y policía en juego.
+1. Que los testers prueben la v1.0 (salida a Android, vibración, idioma); confirmar explosiones y policía en juego.
 2. El usuario irá apuntando más mejoras según juegue.
 ## Notas
 

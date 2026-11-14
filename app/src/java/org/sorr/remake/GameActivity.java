@@ -75,6 +75,10 @@ public class GameActivity extends SDLActivity implements TouchOverlay.KeySink {
             android.system.Os.setenv("SORR_FILTER", LauncherActivity.filterMode(p), true);
             android.system.Os.setenv("SORR_COLORS", p.getString(LauncherActivity.KEY_COLORS, "original"), true);
             android.system.Os.setenv("SORR_LANG", L.code(), true);
+            // the engine writes this file just before a normal exit (it ends the process with exit())
+            java.io.File flag = new java.io.File(getFilesDir(), LauncherActivity.EXIT_FLAG);
+            flag.delete();
+            android.system.Os.setenv("SORR_EXIT_FLAG", flag.getAbsolutePath(), true);
             android.system.Os.setenv("SORR_VIB", String.valueOf(p.getInt(LauncherActivity.KEY_VIB, 50)), true);
         } catch (Exception ignored) {}
         super.onCreate(savedInstanceState);
