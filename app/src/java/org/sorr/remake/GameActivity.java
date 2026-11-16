@@ -10,8 +10,6 @@ import android.view.ViewGroup;
 
 import org.libsdl.app.SDLActivity;
 
-import java.util.HashSet;
-import java.util.Set;
 
 public class GameActivity extends SDLActivity implements TouchOverlay.KeySink {
 
@@ -45,7 +43,8 @@ public class GameActivity extends SDLActivity implements TouchOverlay.KeySink {
     private TouchOverlay overlay;
     private String touchMode;      // auto | never
     private boolean padAsKeyboard; // physical gamepad -> keyboard keys
-    private final Set<Integer> stickHeld = new HashSet<>();
+    private int stickHeld;         // directions held by the stick / hat: bit 0 left, 1 right, 2 up, 3 down
+    private static final int[] STICK_KEYS = { Keys.LEFT, Keys.RIGHT, Keys.UP, Keys.DOWN };
     private java.util.Map<Integer, Integer> padMap = Keys.defaults();
 
     @Override
@@ -277,15 +276,14 @@ public class GameActivity extends SDLActivity implements TouchOverlay.KeySink {
                 float sy = ev.getAxisValue(MotionEvent.AXIS_Y);
                 if (Math.abs(sx) > Math.abs(x)) x = sx;
                 if (Math.abs(sy) > Math.abs(y)) y = sy;
-                Set<Integer> now = new HashSet<>();
-                if (x < -0.5f) now.add(Keys.LEFT);
-                if (x > 0.5f) now.add(Keys.RIGHT);
-                if (y < -0.5f) now.add(Keys.UP);
-                if (y > 0.5f) now.add(Keys.DOWN);
-                for (Integer k : stickHeld) if (!now.contains(k)) SDLActivity.onNativeKeyUp(k);
-                for (Integer k : now) if (!stickHeld.contains(k)) SDLActivity.onNativeKeyDown(k);
-                stickHeld.clear();
-                stickHeld.addAll(now);
+                int now = (x < -0.5f ? 1 : 0) | (x > 0.5f ? 2 : 0) | (y < -0.5f ? 4 : 0) | (y > 0.5f ? 8 : 0);
+                int diff = now ^ stickHeld;
+                for (int i = 0; diff != 0 && i < 4; i++) {
+                    if ((diff & (1 << i)) == 0) continue;
+                    if ((now & (1 << i)) != 0) SDLActivity.onNativeKeyDown(STICK_KEYS[i]);
+                    else SDLActivity.onNativeKeyUp(STICK_KEYS[i]);
+                }
+                stickHeld = now;
                 return true;
             }
         }

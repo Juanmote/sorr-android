@@ -36,7 +36,9 @@ No reutiliza nada de otros ports: motor, lanzador, controles, juego en red y fil
 2. **Copia el juego de PC** (Streets of Rage Remake **v5.2**) a la consola: la carpeta que contiene
    `SorR.dat`, `mod/` y `palettes/`. Puede ir en la memoria interna o en la tarjeta SD.
    La APK no incluye los datos del juego.
-3. **Abre el lanzador**, concede el permiso de archivos y pulsa **Elegir carpeta** para señalar esa carpeta.
+3. **Abre el lanzador** y concede el permiso de archivos. El lanzador busca el juego solo en la memoria y en la
+   tarjeta SD; si no lo encuentra, pulsa **Elegir carpeta** o **Escribir la ruta** (por ejemplo
+   `/storage/XXXX-XXXX/SorR`). Vale señalar una carpeta que tenga el juego dentro de una subcarpeta.
    Cuando ponga *Datos encontrados: SorR.dat*, ya está.
 4. Pulsa **JUGAR**.
 

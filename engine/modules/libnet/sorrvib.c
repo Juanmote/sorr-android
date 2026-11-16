@@ -9,8 +9,9 @@
    La vibracion la hace GameActivity.rumble (Java): en el mando si tiene motor, si no en la consola.
    SORR_VIB = intensidad 0-100 (0 = nada).
 
-   Para poder afinar la lista, se escribe "sorr_sonidos.txt" en la carpeta del juego: cada sonido que ha sonado,
-   cuantas veces, y que vibracion le toca. */
+   Para afinar la lista (solo pruebas, con SORR_SNDLIST=1) se escribe "sorr_sonidos.txt" en la carpeta del juego:
+   cada sonido que ha sonado, cuantas veces, y que vibracion le toca. En la APK no se escribe: era acceso a la
+   tarjeta cada pocos segundos en mitad de la partida. */
 #include <SDL.h>
 #include <ctype.h>
 #include <stdio.h>
@@ -23,7 +24,7 @@
 
 typedef struct { const void *chunk; char name[64]; int plays, cls; } snd_t;
 static snd_t snds[MAXS];
-static int nsnd, level = -1;
+static int nsnd, level = -1, sndlist = -1, sndlog = -1;
 static Uint32 busy_until;
 static int busy_strength, dirty;
 static Uint32 last_write;
@@ -162,17 +163,19 @@ void sorrvib_played(const void *chunk)
         level = e ? atoi(e) : 0;
         if (level < 0) level = 0;
         if (level > 100) level = 100;
+        sndlist = getenv("SORR_SNDLIST") != NULL;
+        sndlog = getenv("SORR_SNDLOG") != NULL;
     }
     for (int i = 0; i < nsnd; i++) if (snds[i].chunk == chunk) { s = &snds[i]; break; }
     if (!s) return;
-    if (getenv("SORR_SNDLOG")) {   /* pruebas en escritorio: fotograma y sonido */
+    if (sndlog) {   /* pruebas en escritorio: fotograma y sonido */
         extern int sorrnet_frame_no;
         fprintf(stderr, "snd %d %s\n", sorrnet_frame_no, s->name);
     }
     now = SDL_GetTicks();
     if (!s->plays++) dirty = 2;                /* sonido nuevo: a la lista en unos segundos */
     else if (!dirty) dirty = 1;               /* solo cambian las cuentas: cada medio minuto */
-    if (dirty && (!last_write || SDL_TICKS_PASSED(now, last_write + (dirty == 2 ? 5000 : 30000)))) {
+    if (sndlist && dirty && (!last_write || SDL_TICKS_PASSED(now, last_write + (dirty == 2 ? 5000 : 30000)))) {
         write_list(); dirty = 0; last_write = now;
     }
     if (!level || s->cls == V_NONE) return;

@@ -57,7 +57,9 @@ public class TouchOverlay extends View {
     private final Btn attack, jump, special, back, combo, police, fin, start, menu;
     private final Btn[] all;
 
-    private final Set<Integer> held = new HashSet<>();
+    private Set<Integer> held = new HashSet<>();
+    private Set<Integer> scratch = new HashSet<>();     // reused on every touch event (no garbage while playing)
+    private final RectF pressed = new RectF();
 
     public TouchOverlay(Context ctx, KeySink sink, float alpha, float scale) {
         super(ctx);
@@ -151,9 +153,9 @@ public class TouchOverlay extends View {
             boolean on = held.contains(b.key);
             if (on) {
                 // Pressed: lit, opaque and slightly smaller
-                RectF s = new RectF(b.r);
-                s.inset(b.r.width() * 0.04f, b.r.height() * 0.04f);
-                c.drawBitmap(b.bmp, null, s, imgOn);
+                pressed.set(b.r);
+                pressed.inset(b.r.width() * 0.04f, b.r.height() * 0.04f);
+                c.drawBitmap(b.bmp, null, pressed, imgOn);
             } else {
                 c.drawBitmap(b.bmp, null, b.r, img);
             }
@@ -176,7 +178,8 @@ public class TouchOverlay extends View {
 
     @Override
     public boolean onTouchEvent(MotionEvent ev) {
-        Set<Integer> now = new HashSet<>();
+        Set<Integer> now = scratch;
+        now.clear();
         int action = ev.getActionMasked();
         int liftedIndex = (action == MotionEvent.ACTION_POINTER_UP) ? ev.getActionIndex() : -1;
         boolean allUp = action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL;
@@ -189,8 +192,8 @@ public class TouchOverlay extends View {
         for (Integer k : held) if (!now.contains(k)) sink.keyUp(k);
         for (Integer k : now) if (!held.contains(k)) sink.keyDown(k);
         boolean changed = !held.equals(now);
-        held.clear();
-        held.addAll(now);
+        scratch = held;
+        held = now;
         if (changed) invalidate();
         return true;
     }

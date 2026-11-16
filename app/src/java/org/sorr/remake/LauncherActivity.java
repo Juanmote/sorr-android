@@ -133,12 +133,25 @@ public class LauncherActivity extends Activity {
                 android.graphics.Paint.FILTER_BITMAP_FLAG | android.graphics.Paint.ANTI_ALIAS_FLAG);
         private final android.graphics.Paint scrim = new android.graphics.Paint();
         private final android.graphics.RectF dst = new android.graphics.RectF();
+        private final android.graphics.Paint fade = new android.graphics.Paint();
+        private int shaderW = -1, shaderH = -1;   // size the gradients were made for
+
+        @Override
+        protected void onSizeChanged(int w, int h, int ow, int oh) {
+            super.onSizeChanged(w, h, ow, oh);
+            shaderW = shaderH = -1;
+        }
 
         ArtView(android.content.Context c) {
             super(c);
             android.graphics.Bitmap b = null;
             try {
-                b = android.graphics.BitmapFactory.decodeResource(c.getResources(), R.drawable.launcher_art);
+                // 1024x1024 artwork drawn at the screen height: small screens get it at half size (a quarter of the memory)
+                android.util.DisplayMetrics dm = c.getResources().getDisplayMetrics();
+                android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
+                o.inScaled = false;
+                o.inSampleSize = Math.min(dm.widthPixels, dm.heightPixels) <= 600 ? 2 : 1;
+                b = android.graphics.BitmapFactory.decodeResource(c.getResources(), R.drawable.launcher_art, o);
             } catch (Throwable ignored) {}
             art = b;
         }
@@ -146,13 +159,20 @@ public class LauncherActivity extends Activity {
         @Override
         protected void onDraw(android.graphics.Canvas cv) {
             int w = getWidth(), h = getHeight();
-            scrim.setShader(new android.graphics.LinearGradient(0, 0, 0, h,
-                    BG_TOP, BG, android.graphics.Shader.TileMode.CLAMP));
-            cv.drawRect(0, 0, w, h, scrim);
-            if (art == null || w == 0 || h == 0) return;
             boolean wide = isWide(w, h);
             float side = h;                      // the artwork is square: fit to height
             float left = wide ? w - side : (w - side) / 2f;
+            float edge = w * COLUMN + h * 0.12f;
+            if (w != shaderW || h != shaderH) {   // gradients only change with the size of the screen
+                shaderW = w; shaderH = h;
+                scrim.setShader(new android.graphics.LinearGradient(0, 0, 0, h,
+                        BG_TOP, BG, android.graphics.Shader.TileMode.CLAMP));
+                fade.setShader(new android.graphics.LinearGradient(left, 0, edge, 0,
+                        0x00000000, 0xFF000000, android.graphics.Shader.TileMode.CLAMP));
+                fade.setXfermode(new android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_IN));
+            }
+            cv.drawRect(0, 0, w, h, scrim);
+            if (art == null || w == 0 || h == 0) return;
             dst.set(left, 0, left + side, side);
             if (!wide) {
                 paint.setAlpha(140);
@@ -161,16 +181,9 @@ public class LauncherActivity extends Activity {
             }
             // fade the artwork out where it meets the options column
             paint.setAlpha(255);
-            float edge = w * COLUMN + h * 0.12f;
             int layer = cv.saveLayer(dst, null);
             cv.drawBitmap(art, null, dst, paint);
-            if (left < edge) {
-                scrim.setShader(new android.graphics.LinearGradient(left, 0, edge, 0,
-                        0x00000000, 0xFF000000, android.graphics.Shader.TileMode.CLAMP));
-                scrim.setXfermode(new android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_IN));
-                cv.drawRect(dst, scrim);
-                scrim.setXfermode(null);
-            }
+            if (left < edge) cv.drawRect(dst, fade);
             cv.restoreToCount(layer);
         }
     }
@@ -311,12 +324,14 @@ public class LauncherActivity extends Activity {
         LinearLayout folder = card(L.t("Carpeta del juego", "Game folder"));
         folder.addView(text(dir.getAbsolutePath(), 15, TEXT));
         if (dat == null) {
-            folder.addView(text(L.t("No se encuentra SorR.dat en esta carpeta. Copia ahí el juego de PC ", "SorR.dat is not in this folder. Copy the PC game there ")
-                    + L.t("(SorR.dat, mod/, palettes/...) o elige otra carpeta.", "(SorR.dat, mod/, palettes/...) or choose another folder."), 15, WARN));
+            folder.addView(text(folderProblem(dir), 15, WARN));
+            if (searching) folder.addView(text(L.t("Buscando el juego en la memoria y la tarjeta SD...", "Looking for the game in the storage and SD card..."), 15, MUTED));
+            else autoDetect();
         } else {
             folder.addView(text(L.t("Datos encontrados: ", "Game data found: ") + dat.getName(), 15, OK));
         }
         folder.addView(button(L.t("Elegir carpeta", "Choose folder"), false, v -> pickFolder()));
+        folder.addView(button(L.t("Escribir la ruta", "Type the path"), false, v -> typeFolder()));
 
         if (dat == null) {
             // Joining someone else's game does not need the game data
@@ -799,6 +814,130 @@ public class LauncherActivity extends Activity {
         return null;
     }
 
+    /** Why the folder has no game data, so the user knows what to fix. */
+    private static String folderProblem(File dir) {
+        if (!dir.exists())
+            return L.t("Esta carpeta no existe. Elige la carpeta donde está SorR.dat o escribe su ruta.",
+                    "This folder does not exist. Choose the folder that has SorR.dat or type its path.");
+        File[] fs = dir.listFiles();
+        if (fs == null)
+            return L.t("El sistema no deja leer esta carpeta. Revisa el permiso de archivos o mueve el juego a otra carpeta.",
+                    "The system does not let the app read this folder. Check the file permission or move the game to another folder.");
+        return L.t("No se encuentra SorR.dat en esta carpeta (" + fs.length + " elementos). Copia ahí el juego de PC "
+                        + "(SorR.dat, mod/, palettes/...) o elige otra carpeta.",
+                "SorR.dat is not in this folder (" + fs.length + " items). Copy the PC game there "
+                        + "(SorR.dat, mod/, palettes/...) or choose another folder.");
+    }
+
+    /** The folder with SorR.dat: the given one or one of its subfolders (a few levels down). */
+    private static File locateGame(File dir, int depth) {
+        if (findDat(dir) != null) return dir;
+        int[] budget = { 4000 };
+        return searchDown(dir, depth, budget);
+    }
+
+    private static File searchDown(File dir, int depth, int[] budget) {
+        if (depth <= 0) return null;
+        File[] fs = dir.listFiles();
+        if (fs == null) return null;
+        java.util.List<File> sub = new java.util.ArrayList<>();
+        for (File f : fs) {
+            if (--budget[0] < 0) return null;
+            if (f.isFile() && f.getName().equalsIgnoreCase("SorR.dat")) return dir;
+            if (f.isDirectory() && !f.getName().startsWith(".") && !f.getName().equals("Android")) sub.add(f);
+        }
+        for (File f : sub) {
+            File r = searchDown(f, depth - 1, budget);
+            if (r != null) return r;
+        }
+        return null;
+    }
+
+    /** Every storage the device has (internal memory, SD cards, USB), as real folders. */
+    private java.util.List<File> storageRoots() {
+        java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+        out.add(Environment.getExternalStorageDirectory().getAbsolutePath());
+        try {
+            android.os.storage.StorageManager sm = (android.os.storage.StorageManager) getSystemService(STORAGE_SERVICE);
+            for (android.os.storage.StorageVolume v : sm.getStorageVolumes()) {
+                String p = volumePath(v);
+                if (p != null) out.add(p);
+            }
+        } catch (Throwable ignored) {}
+        for (String base : new String[] { "/storage", "/mnt/media_rw" }) {
+            File[] fs = new File(base).listFiles();
+            if (fs == null) continue;
+            for (File f : fs) {
+                String n = f.getName();
+                if (n.equals("self") || n.equals("emulated") || !f.isDirectory()) continue;
+                out.add(f.getAbsolutePath());
+            }
+        }
+        java.util.List<File> r = new java.util.ArrayList<>();
+        for (String p : out) r.add(new File(p));
+        return r;
+    }
+
+    private static String volumePath(android.os.storage.StorageVolume v) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                File d = v.getDirectory();
+                if (d != null) return d.getAbsolutePath();
+            }
+        } catch (Throwable ignored) {}
+        try {   // Android 9/10: hidden but present on every build
+            return (String) v.getClass().getMethod("getPath").invoke(v);
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
+    private boolean searching, searched;   // one automatic search each time the launcher is opened
+
+    /** Looks for SorR.dat on every storage once, in the background, and keeps the folder it finds. */
+    private void autoDetect() {
+        if (searching || searched) return;
+        searching = searched = true;
+        new Thread(() -> {
+            File found = null;
+            for (File root : storageRoots()) {
+                found = locateGame(root, 5);
+                if (found != null) break;
+            }
+            final File f = found;
+            runOnUiThread(() -> {
+                searching = false;
+                if (f != null) {
+                    prefs.edit().putString(KEY_DIR, f.getAbsolutePath()).apply();
+                    toast(L.t("Juego encontrado en ", "Game found in ") + f.getAbsolutePath());
+                }
+                if (!isFinishing()) render();
+            });
+        }).start();
+    }
+
+    private void typeFolder() {
+        final EditText in = new EditText(this);
+        in.setSingleLine(true);
+        in.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+        in.setText(gameDir().getAbsolutePath());
+        new AlertDialog.Builder(this)
+                .setTitle(L.t("Ruta de la carpeta del juego", "Game folder path"))
+                .setView(in)
+                .setPositiveButton(L.t("Aceptar", "OK"), (d, w) -> useFolder(in.getText().toString().trim()))
+                .setNegativeButton(L.t("Cancelar", "Cancel"), null)
+                .show();
+    }
+
+    /** Saves the folder; if SorR.dat is in a subfolder, that subfolder is used instead. */
+    private void useFolder(String path) {
+        if (path == null || path.isEmpty()) return;
+        File dir = new File(path);
+        File game = locateGame(dir, 3);
+        if (game != null) dir = game;
+        prefs.edit().putString(KEY_DIR, dir.getAbsolutePath()).apply();
+        render();
+    }
+
     private boolean hasStorage() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) return Environment.isExternalStorageManager();
         return checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
@@ -810,8 +949,17 @@ public class LauncherActivity extends Activity {
                 Intent i = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
                         Uri.parse("package:" + getPackageName()));
                 startActivity(i);
-            } catch (Exception e) {
+                return;
+            } catch (Exception ignored) {}
+            try {
                 startActivity(new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION));
+                return;
+            } catch (Exception ignored) {}
+            try {
+                startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:" + getPackageName())));
+            } catch (Exception e) {
+                toast(L.t("Da a la app el permiso \"Acceso a todos los archivos\" desde Ajustes", "Give the app \"All files access\" in Settings"));
             }
         } else {
             requestPermissions(new String[] {
@@ -829,7 +977,8 @@ public class LauncherActivity extends Activity {
         try {
             startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE), REQ_TREE);
         } catch (Exception e) {
-            toast(L.t("No hay selector de carpetas en este dispositivo", "There is no folder picker on this device"));
+            toast(L.t("No hay selector de carpetas en este dispositivo: escribe la ruta", "There is no folder picker on this device: type the path"));
+            typeFolder();
         }
     }
 
@@ -839,27 +988,52 @@ public class LauncherActivity extends Activity {
         if (req == REQ_TREE && res == RESULT_OK && data != null && data.getData() != null) {
             String path = treeToPath(data.getData());
             if (path == null) {
-                toast(L.t("No se pudo usar esa carpeta", "That folder could not be used"));
-            } else {
-                prefs.edit().putString(KEY_DIR, path).apply();
+                toast(L.t("No se pudo usar esa carpeta: escribe la ruta", "That folder could not be used: type the path"));
+                typeFolder();
+                return;
             }
-            render();
+            useFolder(path);
         }
     }
 
-    private static String treeToPath(Uri uri) {
+    /**
+     * Turns the folder picked in the system selector into a real path. Each selector names folders in its
+     * own way: "primary:Games/SorR", "3E86-BA35:SorR", "home:SorR" (Documents), "raw:/storage/...", or a path.
+     */
+    private String treeToPath(Uri uri) {
+        String id;
         try {
-            String id = DocumentsContract.getTreeDocumentId(uri);
-            String[] parts = id.split(":", 2);
-            String vol = parts[0];
-            String rel = parts.length > 1 ? parts[1] : "";
-            String base = "primary".equalsIgnoreCase(vol)
-                    ? Environment.getExternalStorageDirectory().getAbsolutePath()
-                    : "/storage/" + vol;
-            return rel.isEmpty() ? base : base + "/" + rel;
+            id = DocumentsContract.getTreeDocumentId(uri);
         } catch (Exception e) {
-            return null;
+            id = uri.getPath();
         }
+        if (id == null) return null;
+        id = Uri.decode(id);
+        if (id.startsWith("/")) return id;
+        if (id.startsWith("raw:")) return id.substring(4);
+        int c = id.indexOf(':');
+        String vol = c >= 0 ? id.substring(0, c) : id;
+        String rel = c >= 0 ? id.substring(c + 1) : "";
+        String base = null;
+        if ("primary".equalsIgnoreCase(vol)) {
+            base = Environment.getExternalStorageDirectory().getAbsolutePath();
+        } else if ("home".equalsIgnoreCase(vol)) {
+            base = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS).getAbsolutePath();
+        } else {
+            try {
+                android.os.storage.StorageManager sm = (android.os.storage.StorageManager) getSystemService(STORAGE_SERVICE);
+                for (android.os.storage.StorageVolume v : sm.getStorageVolumes()) {
+                    if (vol.equalsIgnoreCase(v.getUuid())) { base = volumePath(v); break; }
+                }
+            } catch (Throwable ignored) {}
+            if (base == null) {
+                for (String b : new String[] { "/storage/" + vol, "/mnt/media_rw/" + vol, "/mnt/" + vol }) {
+                    if (new File(b).isDirectory()) { base = b; break; }
+                }
+            }
+            if (base == null) base = "/storage/" + vol;
+        }
+        return rel.isEmpty() ? base : base + "/" + rel;
     }
 
     // ------------------------------------------------------------------ helpers

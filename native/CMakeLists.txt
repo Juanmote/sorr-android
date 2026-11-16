@@ -3,6 +3,11 @@ project(sorr_android C CXX)
 
 set(SRC ${CMAKE_CURRENT_SOURCE_DIR}/../src)
 
+# Smaller libraries: every function in its own section and the linker drops the ones nothing uses
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ffunction-sections -fdata-sections")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffunction-sections -fdata-sections")
+set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--gc-sections -Wl,--icf=safe")
+
 # ---- SDL2 (shared: libSDL2.so, loaded by SDLActivity) ----
 set(SDL_SHARED ON CACHE BOOL "" FORCE)
 set(SDL_STATIC OFF CACHE BOOL "" FORCE)

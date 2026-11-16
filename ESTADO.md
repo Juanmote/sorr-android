@@ -152,7 +152,8 @@ consola; la parte técnica la hace Claude.
   lanzamientos y muertes (68, 160), golpes (50, 85), salto (22, 45), escalado por la intensidad del lanzador
   (`vibration`, 0-100, por defecto 50 → `SORR_VIB`). Una suave no corta a una fuerte. Java: `GameActivity.rumble`
   (motor del mando si lo tiene, si no el de la consola). **Los nombres son una suposición**: el juego escribe
-  `sorr_sonidos.txt` en su carpeta (sonidos, veces y vibración asignada) para afinar la lista. Solo en el anfitrión.
+  `sorr_sonidos.txt` en su carpeta (sonidos, veces y vibración asignada) para afinar la lista, solo con
+  `SORR_SNDLIST=1` (desde la v1.1 la APK ya no lo escribe: era escribir en la tarjeta cada pocos segundos jugando).
 - **Lanzador**: tema con los colores del logo (fuego rojo-naranja-amarillo sobre casi negro y el azul de "OF RAGE"),
   fuentes Bangers (títulos, botones principales) y Barlow Condensed (texto), ambas OFL en `assets/fonts`. El foco del
   mando se conserva al rehacer la pantalla (antes se perdía y Android pintaba su "resaltado por defecto" blanco por
@@ -225,10 +226,37 @@ consola; la parte técnica la hace Claude.
 - Menú principal del juego: Enter (28) en el 100 (40 fotogramas) salta la intro, Enter en el 300 (6) entra al menú,
   arriba (72) lleva a SALIR. Sin `savegame/` el juego abre el editor de perfil.
 
+## Versión 1.1 (16-11-2026)
+
+- **Carpeta del juego en la RG Arc (GammaOS)**: el usuario eligió la carpeta y el lanzador no veía el juego. Causa
+  sin confirmar (no hay captura): `treeToPath` solo entendía `primary:` y `UUID:` → `/storage/UUID`. Ahora:
+  - `treeToPath` entiende `raw:/ruta`, `home:` (Documentos), rutas absolutas, y busca el volumen por UUID en
+    `StorageManager` (`getDirectory()` en API 30+, `getPath()` por reflexión antes); si no, prueba `/storage/X`,
+    `/mnt/media_rw/X`, `/mnt/X`.
+  - Si la carpeta elegida no tiene `SorR.dat`, se busca en sus subcarpetas (3 niveles).
+  - Si la carpeta guardada no tiene el juego, búsqueda automática (una vez por apertura, en segundo plano) en todos
+    los almacenamientos, 5 niveles, máximo 4000 entradas por almacenamiento, sin `Android/` ni ocultas.
+  - Botón **Escribir la ruta** (también si no hay selector de carpetas o la carpeta no se puede convertir).
+  - El aviso dice el motivo: no existe / el sistema no deja leerla / N elementos y falta SorR.dat.
+  - El permiso de archivos tiene un tercer intento (ajustes de la app) por si la ROM no trae la pantalla.
+- **Auditoría de rendimiento** (perfil con gprof en Linux, 2400 fotogramas jugando): el motor gasta ~0,5 ms por
+  fotograma (intérprete 49 %, blits 16 bpp el resto); ~12 malloc por fotograma. No hay nada caro que quitar en el
+  motor. Cambios:
+  - `sorrvib.c`: dejó de escribir `sorr_sonidos.txt` (E/S en la tarjeta cada 5-30 s en el hilo del juego); getenv
+    una sola vez.
+  - `sorrnet.c`: getenv(`SORR_KEYLOG`) una vez, no en cada fotograma.
+  - `TouchOverlay`/`GameActivity`: sin objetos nuevos en cada evento táctil o del stick (menos recolector de basura
+    jugando); el stick usa una máscara de bits.
+  - Lanzador: degradados del fondo hechos una vez por tamaño; el arte (1024x1024) se carga a la mitad en pantallas
+    de 600 px o menos.
+  - `native/CMakeLists.txt`: `-ffunction-sections -fdata-sections`, `--gc-sections`, `--icf=safe`.
+
 ## Pendiente
 
-1. Que los testers prueben la v1.0 (salida a Android, vibración, idioma); confirmar explosiones y policía en juego.
-2. El usuario irá apuntando más mejoras según juegue.
+1. Que los testers prueben la v1.0/1.1 (salida a Android, vibración, idioma); confirmar explosiones y policía.
+2. RG Arc: confirmar que ahora encuentra el juego; si no, pedir captura del lanzador (ruta y aviso que sale).
+3. El usuario irá apuntando más mejoras según juegue.
+
 ## Notas
 
 - El registro mostraba que el juego pide 960x544 al iniciar y luego 416x240: su carpeta de datos

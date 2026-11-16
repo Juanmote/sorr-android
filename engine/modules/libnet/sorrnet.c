@@ -206,8 +206,10 @@ int sorrnet_key(int code)
 void sorrnet_frame(const void *pixels, int w, int h, int pitch, int bpp)
 {
     frame_no++;
+    static int keylog = -1;             /* getenv una sola vez, no en cada fotograma */
     test_hooks(pixels, w, h, pitch, bpp);
-    if (getenv("SORR_KEYLOG") && frame_no % 100 == 0) {
+    if (keylog < 0) keylog = getenv("SORR_KEYLOG") != NULL;
+    if (keylog && frame_no % 100 == 0) {
         char b[1024]; int o = 0;
         for (int i = 1; i < 128; i++) if (qcount[i]) o += snprintf(b + o, sizeof b - o, " %d:%d", i, qcount[i]);
         fprintf(stderr, "keys f%d:%s\n", frame_no, b);
