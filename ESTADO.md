@@ -1,6 +1,6 @@
 # Estado del proyecto: port Android de Streets of Rage Remake
 
-Última actualización: 14 de noviembre de 2026 (versión 1.0, primera para los testers del usuario).
+Última actualización: 16 de noviembre de 2026 (versión 1.1).
 
 ## Qué es
 
@@ -249,7 +249,10 @@ consola; la parte técnica la hace Claude.
     jugando); el stick usa una máscara de bits.
   - Lanzador: degradados del fondo hechos una vez por tamaño; el arte (1024x1024) se carga a la mitad en pantallas
     de 600 px o menos.
-  - `native/CMakeLists.txt`: `-ffunction-sections -fdata-sections`, `--gc-sections`, `--icf=safe`.
+  - `native/CMakeLists.txt`: `-ffunction-sections -fdata-sections`, `--gc-sections`, `--icf=safe`. En la APK de
+    la v1.1 las .so salieron prácticamente iguales (libSDL2 idéntica): no aporta; se deja, no molesta.
+- **CI**: el runner de GitHub pasó a CMake 4, que rechaza `cmake_minimum_required(VERSION 3.4)`. Subido a 3.10 en
+  `engine/` y `tre/`, y `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` en `build_apk.sh`. Release v1.1 publicada.
 
 ## Pendiente
 
