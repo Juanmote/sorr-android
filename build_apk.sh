@@ -22,7 +22,7 @@ for ABI in ${ABIS:-arm64-v8a armeabi-v7a}; do
   B=$ROOT/native/build-$ABI
   if [ ! -f "$B/CMakeCache.txt" ]; then
     cmake -S $ROOT/native -B $B -DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake \
-      -DANDROID_ABI=$ABI -DANDROID_PLATFORM=android-28 -DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON -DCMAKE_BUILD_TYPE=Release >/dev/null
+      -DANDROID_ABI=$ABI -DANDROID_PLATFORM=android-28 -DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_BUILD_TYPE=Release >/dev/null
   fi
   cmake --build $B -j$JOBS 2>/dev/null >/dev/null || cmake --build $B -j$JOBS
 done

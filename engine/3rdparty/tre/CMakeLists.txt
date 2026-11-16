@@ -1,6 +1,6 @@
 set(CMAKE_CONFIGURATION_TYPES "Release;Debug;MinSizeRel;RelWithDebInfo")
 project(libtre C)
-cmake_minimum_required(VERSION 3.4)
+cmake_minimum_required(VERSION 3.10)
 
 set(SOURCE_FILES
     lib/tre-ast.c
